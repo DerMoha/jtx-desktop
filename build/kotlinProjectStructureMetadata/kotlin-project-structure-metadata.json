@@ -20,14 +20,7 @@
       {
         "name": "commonMain",
         "dependsOn": [],
-        "moduleDependency": [
-          "androidx.compose.ui:ui",
-          "androidx.compose.foundation:foundation",
-          "androidx.compose.material3:material3",
-          "androidx.compose.components:components-resources",
-          "org.jetbrains.kotlinx:kotlinx-coroutines-core",
-          "org.jetbrains.kotlinx:kotlinx-serialization-json"
-        ],
+        "moduleDependency": [],
         "binaryLayout": "klib"
       }
     ]
