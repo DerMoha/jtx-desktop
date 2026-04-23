@@ -27,6 +27,10 @@ class JournalRepository(private val local: InMemoryLocalDataSource) {
     suspend fun getById(id: String): JournalEntry? = local.getJournalById(id)
     suspend fun insert(entry: JournalEntry) = local.insertJournal(entry)
     suspend fun update(entry: JournalEntry) = local.updateJournal(entry)
+    suspend fun updateJournal(combined: CombinedEntry) {
+        val existing = local.getJournalById(combined.id) ?: return
+        local.updateJournal(existing.copy(title = combined.title, description = combined.description))
+    }
     suspend fun delete(id: String) = local.deleteJournal(id)
 }
 
@@ -50,6 +54,10 @@ class NoteRepository(private val local: InMemoryLocalDataSource) {
     suspend fun getById(id: String): NoteEntry? = local.getNoteById(id)
     suspend fun insert(entry: NoteEntry) = local.insertNote(entry)
     suspend fun update(entry: NoteEntry) = local.updateNote(entry)
+    suspend fun updateNote(combined: CombinedEntry) {
+        val existing = local.getNoteById(combined.id) ?: return
+        local.updateNote(existing.copy(title = combined.title, description = combined.description))
+    }
     suspend fun delete(id: String) = local.deleteNote(id)
 }
 
@@ -73,6 +81,19 @@ class TaskRepository(private val local: InMemoryLocalDataSource) {
     suspend fun getById(id: String): TaskEntry? = local.getTaskById(id)
     suspend fun insert(entry: TaskEntry) = local.insertTask(entry)
     suspend fun update(entry: TaskEntry) = local.updateTask(entry)
+    suspend fun updateTask(combined: CombinedEntry) {
+        val existing = local.getTaskById(combined.id) ?: return
+        local.updateTask(existing.copy(
+            title = combined.title,
+            description = combined.description,
+            progress = combined.progress ?: 0,
+            completed = combined.completed ?: false
+        ))
+    }
+    suspend fun updateTaskCompleted(id: String, completed: Boolean) {
+        val existing = local.getTaskById(id) ?: return
+        local.updateTask(existing.copy(completed = completed))
+    }
     suspend fun delete(id: String) = local.deleteTask(id)
 }
 
@@ -81,6 +102,7 @@ class SyncRepository(
     private val calDavClient: CalDavClient,
     private val parser: ICalendarParser
 ) {
+    val localDataSource: InMemoryLocalDataSource get() = local
     suspend fun sync(credentials: CalDavCredentials, collection: String): Result<Unit> {
         val fetchResult = calDavClient.fetchEntries(credentials, collection)
         return fetchResult.fold(
