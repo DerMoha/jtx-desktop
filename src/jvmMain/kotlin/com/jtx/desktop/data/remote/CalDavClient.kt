@@ -10,11 +10,15 @@ import java.util.Base64
 import javax.net.ssl.HttpsURLConnection
 
 class CalDavClient {
+    private val connectTimeout = 30000
+    private val readTimeout = 60000
 
     suspend fun fetchEntries(credentials: CalDavCredentials, collection: String): Result<List<String>> = withContext(Dispatchers.IO) {
         try {
             val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$collection").toString())
             val conn = url.openConnection() as HttpsURLConnection
+            conn.connectTimeout = connectTimeout
+            conn.readTimeout = readTimeout
             conn.requestMethod = "REPORT"
             conn.setRequestProperty("Content-Type", "application/xml; charset=utf-8")
             conn.setRequestProperty("Depth", "1")
@@ -47,6 +51,8 @@ class CalDavClient {
         try {
             val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$href").toString())
             val conn = url.openConnection() as HttpsURLConnection
+            conn.connectTimeout = connectTimeout
+            conn.readTimeout = readTimeout
             conn.requestMethod = "GET"
             setAuth(conn, credentials)
 
@@ -66,6 +72,8 @@ class CalDavClient {
         try {
             val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$href").toString())
             val conn = url.openConnection() as HttpsURLConnection
+            conn.connectTimeout = connectTimeout
+            conn.readTimeout = readTimeout
             conn.requestMethod = "PUT"
             conn.setRequestProperty("Content-Type", "text/calendar; charset=utf-8")
             conn.setRequestProperty("If-Match", "*")
@@ -88,6 +96,8 @@ class CalDavClient {
         try {
             val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$href").toString())
             val conn = url.openConnection() as HttpsURLConnection
+            conn.connectTimeout = connectTimeout
+            conn.readTimeout = readTimeout
             conn.requestMethod = "DELETE"
             setAuth(conn, credentials)
 
@@ -118,9 +128,28 @@ class CalDavClient {
 
 class ICalendarParser {
 
+    private fun unfoldLines(lines: List<String>): List<String> {
+        val result = mutableListOf<String>()
+        var current = StringBuilder()
+        for (line in lines) {
+            if (line.startsWith(" ") || line.startsWith("\t")) {
+                current.append(line.substring(1))
+            } else {
+                if (current.isNotEmpty()) {
+                    result.add(current.toString())
+                }
+                current = StringBuilder(line)
+            }
+        }
+        if (current.isNotEmpty()) {
+            result.add(current.toString())
+        }
+        return result
+    }
+
     fun parseVJournal(ics: String): JournalEntry? {
         return try {
-            val lines = ics.lines()
+            val lines = unfoldLines(ics.lines())
             var uid = ""
             var summary = ""
             var description = ""
@@ -137,7 +166,10 @@ class ICalendarParser {
                 when {
                     line.startsWith("UID:") -> uid = line.substringAfter("UID:").trim()
                     line.startsWith("SUMMARY:") -> summary = line.substringAfter("SUMMARY:").trim()
-                    line.startsWith("DESCRIPTION:") -> description = line.substringAfter("DESCRIPTION:").trim()
+                    line.startsWith("DESCRIPTION") -> {
+                        val value = line.substringAfter(":").trim()
+                        if (description.isEmpty()) description = value else description += value
+                    }
                     line.startsWith("DTSTART") -> dtstart = parseIcsDate(line)
                     line.startsWith("DTEND") -> dtend = parseIcsDate(line)
                     line.startsWith("CATEGORIES:") -> categories = line.substringAfter("CATEGORIES:").trim().split(",").map { it.trim() }.toMutableList()
@@ -163,7 +195,7 @@ class ICalendarParser {
 
     fun parseVTodo(ics: String): TaskEntry? {
         return try {
-            val lines = ics.lines()
+            val lines = unfoldLines(ics.lines())
             var uid = ""
             var summary = ""
             var description = ""
@@ -181,7 +213,10 @@ class ICalendarParser {
                 when {
                     line.startsWith("UID:") -> uid = line.substringAfter("UID:").trim()
                     line.startsWith("SUMMARY:") -> summary = line.substringAfter("SUMMARY:").trim()
-                    line.startsWith("DESCRIPTION:") -> description = line.substringAfter("DESCRIPTION:").trim()
+                    line.startsWith("DESCRIPTION") -> {
+                        val value = line.substringAfter(":").trim()
+                        if (description.isEmpty()) description = value else description += value
+                    }
                     line.startsWith("DUE:") -> due = parseIcsDate(line)
                     line.startsWith("DTSTART") -> start = parseIcsDate(line)
                     line.startsWith("STATUS:COMPLETED") -> completed = true
@@ -202,6 +237,45 @@ class ICalendarParser {
                 categories = categories, created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, subtasks = emptyList(), relatedEntries = emptyList()
+            )
+        } catch (e: Exception) { null }
+    }
+
+    fun parseVNote(ics: String): NoteEntry? {
+        return try {
+            val lines = unfoldLines(ics.lines())
+            var uid = ""
+            var summary = ""
+            var description = ""
+            var categories = mutableListOf<String>()
+            var created: Long? = null
+            var dtstamp: Long? = null
+            var color: String? = null
+            var location: String? = null
+
+            for (line in lines) {
+                when {
+                    line.startsWith("UID:") -> uid = line.substringAfter("UID:").trim()
+                    line.startsWith("SUMMARY:") -> summary = line.substringAfter("SUMMARY:").trim()
+                    line.startsWith("DESCRIPTION") -> {
+                        val value = line.substringAfter(":").trim()
+                        if (description.isEmpty()) description = value else description += value
+                    }
+                    line.startsWith("CATEGORIES:") -> categories = line.substringAfter("CATEGORIES:").trim().split(",").map { it.trim() }.toMutableList()
+                    line.startsWith("CREATED:") -> created = parseIcsDate(line)
+                    line.startsWith("DTSTAMP:") -> dtstamp = parseIcsDate(line)
+                    line.startsWith("COLOR:") -> color = line.substringAfter("COLOR:").trim()
+                    line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
+                }
+            }
+
+            if (uid.isEmpty()) return null
+
+            NoteEntry(
+                id = uid, uid = uid, title = summary, description = description,
+                categories = categories, created = created ?: System.currentTimeMillis(),
+                updated = dtstamp ?: System.currentTimeMillis(),
+                color = color, location = location
             )
         } catch (e: Exception) { null }
     }
@@ -250,6 +324,26 @@ class ICalendarParser {
             appendLine("CREATED:${formatIcsDate(entry.created)}")
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VTODO")
+            appendLine("END:VCALENDAR")
+        }
+    }
+
+    fun noteToIcs(entry: NoteEntry): String {
+        return buildString {
+            appendLine("BEGIN:VCALENDAR")
+            appendLine("VERSION:2.0")
+            appendLine("PRODID:-//jtxBoard Desktop//EN")
+            appendLine("BEGIN:VNOTE")
+            appendLine("UID:${entry.uid}")
+            appendLine("DTSTAMP:${formatIcsDate(entry.updated)}")
+            appendLine("SUMMARY:${entry.title}")
+            if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description}")
+            if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",")}")
+            if (entry.color != null) appendLine("COLOR:${entry.color}")
+            if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
+            appendLine("CREATED:${formatIcsDate(entry.created)}")
+            appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
+            appendLine("END:VNOTE")
             appendLine("END:VCALENDAR")
         }
     }
