@@ -103,28 +103,60 @@ class SyncRepository(
     private val parser: ICalendarParser
 ) {
     val localDataSource: InMemoryLocalDataSource get() = local
-    suspend fun sync(credentials: CalDavCredentials, collection: String): Result<Unit> {
+
+    data class SyncResult(
+        val successCount: Int,
+        val failureCount: Int,
+        val failures: List<String>
+    )
+
+    suspend fun sync(credentials: CalDavCredentials, collection: String): Result<SyncResult> {
         val fetchResult = calDavClient.fetchEntries(credentials, collection)
         return fetchResult.fold(
             onSuccess = { hrefs ->
+                var successCount = 0
+                var failureCount = 0
+                val failures = mutableListOf<String>()
+
                 for (href in hrefs) {
-                    calDavClient.fetchCalendarData(credentials, href).onSuccess { data ->
-                        val entry = when {
-                            data.contains("BEGIN:VJOURNAL") -> parser.parseVJournal(data)
-                            data.contains("BEGIN:VTODO") -> parser.parseVTodo(data)
-                            else -> null
+                    val fetchDataResult = calDavClient.fetchCalendarData(credentials, href)
+                    fetchDataResult.fold(
+                        onSuccess = { data ->
+                            val entry = when {
+                                data.contains("BEGIN:VJOURNAL") -> parser.parseVJournal(data)
+                                data.contains("BEGIN:VTODO") -> parser.parseVTodo(data)
+                                data.contains("BEGIN:VNOTE") -> parser.parseVNote(data)
+                                else -> null
+                            }
+                            when (entry) {
+                                is JournalEntry -> {
+                                    local.insertJournal(entry)
+                                    successCount++
+                                }
+                                is NoteEntry -> {
+                                    local.insertNote(entry)
+                                    successCount++
+                                }
+                                is TaskEntry -> {
+                                    local.insertTask(entry)
+                                    successCount++
+                                }
+                                else -> {}
+                            }
+                        },
+                        onFailure = { e ->
+                            failureCount++
+                            failures.add("Failed to fetch $href: ${e.message}")
                         }
-                        when (entry) {
-                            is JournalEntry -> local.insertJournal(entry)
-                            is NoteEntry -> local.insertNote(entry)
-                            is TaskEntry -> local.insertTask(entry)
-                            else -> {}
-                        }
-                    }
+                    )
                 }
                 val settings = local.getSettings()
                 local.saveSettings(settings.copy(lastSyncTime = System.currentTimeMillis()))
-                Result.success(Unit)
+                if (failureCount > 0) {
+                    Result.success(SyncResult(successCount, failureCount, failures))
+                } else {
+                    Result.success(SyncResult(successCount, failureCount, emptyList()))
+                }
             },
             onFailure = { Result.failure(it) }
         )
@@ -132,6 +164,12 @@ class SyncRepository(
 
     suspend fun uploadJournal(credentials: CalDavCredentials, entry: JournalEntry, collection: String): Result<String> {
         val ics = parser.journalToIcs(entry)
+        val href = "$collection/${entry.uid}.ics"
+        return calDavClient.putEntry(credentials, href, ics)
+    }
+
+    suspend fun uploadNote(credentials: CalDavCredentials, entry: NoteEntry, collection: String): Result<String> {
+        val ics = parser.noteToIcs(entry)
         val href = "$collection/${entry.uid}.ics"
         return calDavClient.putEntry(credentials, href, ics)
     }
