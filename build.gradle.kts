@@ -40,7 +40,7 @@ kotlin {
                 implementation(compose.desktop.common)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
                 implementation("com.google.code.gson:gson:2.11.0")
-                implementation("org.jetbrains.skiko:skiko:0.9.18")
+                implementation("org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.9.18")
             }
         }
     }
