@@ -82,5 +82,6 @@ data class CalDavCredentials(
 @Serializable
 data class AppSettings(
     val credentials: CalDavCredentials? = null,
+    val collection: String? = null,
     val lastSyncTime: Long? = null
 )

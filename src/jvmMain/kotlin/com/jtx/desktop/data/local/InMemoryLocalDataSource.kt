@@ -4,12 +4,20 @@ import com.jtx.desktop.domain.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.util.prefs.Preferences
 
 class InMemoryLocalDataSource {
     private val _journals = MutableStateFlow<List<JournalEntry>>(emptyList())
     private val _notes = MutableStateFlow<List<NoteEntry>>(emptyList())
     private val _tasks = MutableStateFlow<List<TaskEntry>>(emptyList())
     private var settings = AppSettings()
+    private val prefs = Preferences.userNodeForPackage(InMemoryLocalDataSource::class.java)
+
+    init {
+        loadSettings()
+    }
 
     fun getAllJournals(): Flow<List<JournalEntry>> = _journals.asStateFlow()
     fun getAllNotes(): Flow<List<NoteEntry>> = _notes.asStateFlow()
@@ -59,6 +67,18 @@ class InMemoryLocalDataSource {
 
     suspend fun saveSettings(newSettings: AppSettings) {
         settings = newSettings
+        prefs.put("settings", Json.encodeToString(newSettings))
+    }
+
+    private fun loadSettings() {
+        val stored = prefs.get("settings", null)
+        if (stored != null) {
+            try {
+                settings = kotlinx.serialization.json.Json.decodeFromString(stored)
+            } catch (e: Exception) {
+                // Use defaults
+            }
+        }
     }
 }
 
