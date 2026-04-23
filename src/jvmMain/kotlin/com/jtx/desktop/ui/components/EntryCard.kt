@@ -2,7 +2,10 @@ package com.jtx.desktop.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -44,14 +47,7 @@ fun EntryCard(
                 EntryType.NOTE -> Color(0xFF9C27B0)
                 EntryType.TASK -> Color(0xFF2196F3)
             }
-            val indicatorModifier = if (entry.color != null) {
-                Modifier.background(Color(android.graphics.Color.parseColor(entry.color)), RoundedCornerShape(4.dp))
-                    .size(8.dp, 48.dp)
-            } else {
-                Modifier.background(indicatorColor, RoundedCornerShape(4.dp))
-                    .size(8.dp, 48.dp)
-            }
-            
+
             Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -81,26 +77,24 @@ fun EntryCard(
             if (entry.type == EntryType.TASK) {
                 if (entry.completed == true) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.CheckCircle,
+                        imageVector = Icons.Default.CheckCircle,
                         contentDescription = "Completed",
                         tint = Color(0xFF4CAF50),
                         modifier = Modifier.size(24.dp)
                     )
-                } else {
+                } else if (entry.progress != null && entry.progress > 0) {
                     Box(
                         modifier = Modifier
                             .size(24.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            .background(indicatorColor.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (entry.progress != null && entry.progress > 0) {
-                            Text(
-                                text = "${entry.progress}%",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Text(
+                            text = "${entry.progress}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

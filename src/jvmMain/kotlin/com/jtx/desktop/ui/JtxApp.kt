@@ -2,7 +2,10 @@ package com.jtx.desktop.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -15,10 +18,10 @@ import com.jtx.desktop.ui.screens.kanban.KanbanScreen
 import com.jtx.desktop.domain.model.EntryType
 
 enum class Tab(val title: String, val icon: ImageVector) {
-    Journals("Journals", Icons.Default.Book),
-    Notes("Notes", Icons.Default.StickyNote2),
+    Journals("Journals", Icons.Default.List),
+    Notes("Notes", Icons.Default.List),
     Tasks("Tasks", Icons.Default.CheckCircle),
-    Kanban("Board", Icons.Default.Dashboard)
+    Kanban("Board", Icons.Default.List)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,7 +41,7 @@ fun JtxApp() {
                     ),
                     actions = {
                         IconButton(onClick = { }) {
-                            Icon(Icons.Default.Sync, contentDescription = "Sync")
+                            Icon(Icons.Default.Refresh, contentDescription = "Sync")
                         }
                     }
                 )
