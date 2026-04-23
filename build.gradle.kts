@@ -46,6 +46,12 @@ kotlin {
     }
 }
 
+configurations.all {
+    resolutionStrategy {
+        force("org.jetbrains.skiko:skiko:0.9.18")
+    }
+}
+
 compose {
     desktop {
         application {
