@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.domain.model.CombinedEntry
 import com.jtx.desktop.domain.model.EntryType
 
@@ -26,8 +27,8 @@ data class KanbanColumn(
 )
 
 @Composable
-fun KanbanScreen() {
-    var columns by remember { 
+fun KanbanScreen(repository: TaskRepository) {
+    var columns by remember {
         mutableStateOf(
             listOf(
                 KanbanColumn("To Do", Color(0xFF2196F3), emptyList()),
@@ -35,6 +36,16 @@ fun KanbanScreen() {
                 KanbanColumn("Done", Color(0xFF4CAF50), emptyList())
             )
         )
+    }
+
+    LaunchedEffect(Unit) {
+        repository.getAllCombined().collect { tasks ->
+            columns = listOf(
+                KanbanColumn("To Do", Color(0xFF2196F3), tasks.filter { it.completed != true }),
+                KanbanColumn("In Progress", Color(0xFFFFC107), emptyList()),
+                KanbanColumn("Done", Color(0xFF4CAF50), tasks.filter { it.completed == true })
+            )
+        }
     }
 
     var draggedEntry by remember { mutableStateOf<CombinedEntry?>(null) }

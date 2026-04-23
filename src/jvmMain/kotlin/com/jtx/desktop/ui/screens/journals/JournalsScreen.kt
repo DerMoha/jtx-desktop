@@ -12,14 +12,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jtx.desktop.data.repository.JournalRepository
 import com.jtx.desktop.domain.model.CombinedEntry
+import com.jtx.desktop.domain.model.JournalEntry
 import com.jtx.desktop.ui.components.EntryCard
 import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
-fun JournalsScreen() {
+fun JournalsScreen(repository: JournalRepository) {
     var journals by remember { mutableStateOf(listOf<CombinedEntry>()) }
+    LaunchedEffect(Unit) {
+        repository.getAllCombined().collect { journals = it }
+    }
     var selectedEntry by remember { mutableStateOf<CombinedEntry?>(null) }
     var isEditing by remember { mutableStateOf(false) }
 
@@ -58,7 +63,9 @@ fun JournalsScreen() {
             onDismiss = { selectedEntry = null },
             onEdit = { isEditing = true },
             onDelete = {
-                journals = journals.filter { it.id != selectedEntry?.id }
+                kotlinx.coroutines.runBlocking {
+                    repository.delete(selectedEntry!!.id)
+                }
                 selectedEntry = null
             }
         )
@@ -69,7 +76,9 @@ fun JournalsScreen() {
             entry = selectedEntry!!,
             onDismiss = { isEditing = false },
             onSave = { updated ->
-                journals = journals.map { if (it.id == updated.id) updated else it }
+                kotlinx.coroutines.runBlocking {
+                    repository.updateJournal(updated)
+                }
                 selectedEntry = null
                 isEditing = false
             }

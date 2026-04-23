@@ -12,12 +12,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.domain.model.CombinedEntry
 import com.jtx.desktop.ui.components.EntryCard
 
 @Composable
-fun TasksScreen() {
+fun TasksScreen(repository: TaskRepository) {
     var tasks by remember { mutableStateOf(listOf<CombinedEntry>()) }
+    LaunchedEffect(Unit) {
+        repository.getAllCombined().collect { tasks = it }
+    }
     var selectedTask by remember { mutableStateOf<CombinedEntry?>(null) }
     var isEditing by remember { mutableStateOf(false) }
 
@@ -56,12 +60,14 @@ fun TasksScreen() {
             onDismiss = { selectedTask = null },
             onEdit = { isEditing = true },
             onDelete = {
-                tasks = tasks.filter { it.id != selectedTask?.id }
+                kotlinx.coroutines.runBlocking {
+                    repository.delete(selectedTask!!.id)
+                }
                 selectedTask = null
             },
             onToggleComplete = { completed ->
-                tasks = tasks.map { 
-                    if (it.id == selectedTask?.id) it.copy(completed = completed) else it 
+                kotlinx.coroutines.runBlocking {
+                    repository.updateTaskCompleted(selectedTask!!.id, completed)
                 }
             }
         )
@@ -72,7 +78,9 @@ fun TasksScreen() {
             entry = selectedTask!!,
             onDismiss = { isEditing = false },
             onSave = { updated ->
-                tasks = tasks.map { if (it.id == updated.id) updated else it }
+                kotlinx.coroutines.runBlocking {
+                    repository.updateTask(updated)
+                }
                 selectedTask = null
                 isEditing = false
             }

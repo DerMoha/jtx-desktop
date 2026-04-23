@@ -12,12 +12,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jtx.desktop.data.repository.NoteRepository
 import com.jtx.desktop.domain.model.CombinedEntry
 import com.jtx.desktop.ui.components.EntryCard
 
 @Composable
-fun NotesScreen() {
+fun NotesScreen(repository: NoteRepository) {
     var notes by remember { mutableStateOf(listOf<CombinedEntry>()) }
+    LaunchedEffect(Unit) {
+        repository.getAllCombined().collect { notes = it }
+    }
     var selectedNote by remember { mutableStateOf<CombinedEntry?>(null) }
     var isEditing by remember { mutableStateOf(false) }
 
@@ -56,7 +60,9 @@ fun NotesScreen() {
             onDismiss = { selectedNote = null },
             onEdit = { isEditing = true },
             onDelete = {
-                notes = notes.filter { it.id != selectedNote?.id }
+                kotlinx.coroutines.runBlocking {
+                    repository.delete(selectedNote!!.id)
+                }
                 selectedNote = null
             }
         )
@@ -67,7 +73,9 @@ fun NotesScreen() {
             entry = selectedNote!!,
             onDismiss = { isEditing = false },
             onSave = { updated ->
-                notes = notes.map { if (it.id == updated.id) updated else it }
+                kotlinx.coroutines.runBlocking {
+                    repository.updateNote(updated)
+                }
                 selectedNote = null
                 isEditing = false
             }
