@@ -27,7 +27,8 @@ data class NoteEntry(
     val categories: List<String>,
     val created: Long,
     val updated: Long,
-    val color: String?
+    val color: String?,
+    val location: String? = null
 )
 
 @Serializable
