@@ -1,10 +1,10 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("multiplatform") version "2.2.0"
-    id("org.jetbrains.compose") version "1.7.3"
-    kotlin("plugin.serialization") version "2.2.0"
-    kotlin("plugin.compose") version "2.2.0"
+    kotlin("multiplatform") version "2.3.20"
+    id("org.jetbrains.compose") version "1.10.3"
+    kotlin("plugin.serialization") version "2.3.20"
+    kotlin("plugin.compose") version "2.3.20"
 }
 
 group = "com.jtx.desktop"
@@ -29,6 +29,7 @@ kotlin {
                 api(compose.ui)
                 api(compose.foundation)
                 api(compose.material3)
+                api("org.jetbrains.compose.material:material-icons-extended:1.7.3")
                 api(compose.components.resources)
                 api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
                 api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
@@ -39,7 +40,7 @@ kotlin {
                 implementation(compose.desktop.common)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
                 implementation("com.google.code.gson:gson:2.11.0")
-                implementation("org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.9.18")
+                implementation("org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.9.47")
             }
         }
     }
@@ -47,7 +48,7 @@ kotlin {
 
 configurations.all {
     resolutionStrategy {
-        force("org.jetbrains.skiko:skiko:0.9.18")
+        force("org.jetbrains.skiko:skiko:0.9.47")
     }
 }
 
