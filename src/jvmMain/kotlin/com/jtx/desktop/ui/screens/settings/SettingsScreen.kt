@@ -156,7 +156,14 @@ fun SettingsScreen(
                         if (creds != null && coll != null) {
                             val result = syncRepository.sync(creds, coll)
                             syncMessage = result.fold(
-                                onSuccess = { "Sync completed successfully" },
+                                onSuccess = { syncResult ->
+                                    when {
+                                        syncResult.failureCount > 0 -> {
+                                            "Sync completed: ${syncResult.successCount} synced, ${syncResult.failureCount} failed"
+                                        }
+                                        else -> "Sync completed successfully (${syncResult.successCount} entries)"
+                                    }
+                                },
                                 onFailure = { "Sync failed: ${it.message}" }
                             )
                             if (result.isSuccess) {
