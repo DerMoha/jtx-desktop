@@ -28,15 +28,30 @@ class InMemoryLocalDataSource {
     suspend fun getTaskById(id: String): TaskEntry? = _tasks.value.find { it.id == id }
 
     suspend fun insertJournal(entry: JournalEntry) {
-        _journals.value = _journals.value + entry
+        val existing = _journals.value.find { it.id == entry.id }
+        if (existing != null) {
+            updateJournal(entry)
+        } else {
+            _journals.value = _journals.value + entry
+        }
     }
 
     suspend fun insertNote(entry: NoteEntry) {
-        _notes.value = _notes.value + entry
+        val existing = _notes.value.find { it.id == entry.id }
+        if (existing != null) {
+            updateNote(entry)
+        } else {
+            _notes.value = _notes.value + entry
+        }
     }
 
     suspend fun insertTask(entry: TaskEntry) {
-        _tasks.value = _tasks.value + entry
+        val existing = _tasks.value.find { it.id == entry.id }
+        if (existing != null) {
+            updateTask(entry)
+        } else {
+            _tasks.value = _tasks.value + entry
+        }
     }
 
     suspend fun updateJournal(entry: JournalEntry) {
