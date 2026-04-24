@@ -16,6 +16,7 @@ import com.jtx.desktop.data.repository.JournalRepository
 import com.jtx.desktop.domain.model.CombinedEntry
 import com.jtx.desktop.domain.model.JournalEntry
 import com.jtx.desktop.ui.components.EntryCard
+import com.jtx.desktop.ui.components.SearchBar
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -27,31 +28,52 @@ fun JournalsScreen(repository: JournalRepository) {
     }
     var selectedEntry by remember { mutableStateOf<CombinedEntry?>(null) }
     var isEditing by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 8.dp)
-    ) {
-        items(journals, key = { it.id }) { journal ->
-            EntryCard(
-                entry = journal,
-                onClick = { selectedEntry = journal }
-            )
+    val filteredJournals = remember(journals, searchQuery) {
+        if (searchQuery.isBlank()) {
+            journals
+        } else {
+            journals.filter { entry ->
+                entry.title.contains(searchQuery, ignoreCase = true) ||
+                entry.description.contains(searchQuery, ignoreCase = true) ||
+                entry.categories.any { it.contains(searchQuery, ignoreCase = true) }
+            }
         }
+    }
 
-        if (journals.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No journals yet",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+    Column(modifier = Modifier.fillMaxSize()) {
+        SearchBar(
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            placeholder = "Search journals..."
+        )
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            items(filteredJournals, key = { it.id }) { journal ->
+                EntryCard(
+                    entry = journal,
+                    onClick = { selectedEntry = journal }
+                )
+            }
+
+            if (filteredJournals.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (searchQuery.isNotBlank()) "No journals found" else "No journals yet",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }

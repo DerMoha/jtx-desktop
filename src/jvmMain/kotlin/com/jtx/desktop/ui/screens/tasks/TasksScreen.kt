@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.domain.model.CombinedEntry
 import com.jtx.desktop.ui.components.EntryCard
+import com.jtx.desktop.ui.components.SearchBar
 
 @Composable
 fun TasksScreen(repository: TaskRepository) {
@@ -24,31 +25,52 @@ fun TasksScreen(repository: TaskRepository) {
     }
     var selectedTask by remember { mutableStateOf<CombinedEntry?>(null) }
     var isEditing by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 8.dp)
-    ) {
-        items(tasks, key = { it.id }) { task ->
-            EntryCard(
-                entry = task,
-                onClick = { selectedTask = task }
-            )
+    val filteredTasks = remember(tasks, searchQuery) {
+        if (searchQuery.isBlank()) {
+            tasks
+        } else {
+            tasks.filter { entry ->
+                entry.title.contains(searchQuery, ignoreCase = true) ||
+                entry.description.contains(searchQuery, ignoreCase = true) ||
+                entry.categories.any { it.contains(searchQuery, ignoreCase = true) }
+            }
         }
+    }
 
-        if (tasks.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No tasks yet",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+    Column(modifier = Modifier.fillMaxSize()) {
+        SearchBar(
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            placeholder = "Search tasks..."
+        )
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            items(filteredTasks, key = { it.id }) { task ->
+                EntryCard(
+                    entry = task,
+                    onClick = { selectedTask = task }
+                )
+            }
+
+            if (filteredTasks.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (searchQuery.isNotBlank()) "No tasks found" else "No tasks yet",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }

@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.jtx.desktop.data.repository.NoteRepository
 import com.jtx.desktop.domain.model.CombinedEntry
 import com.jtx.desktop.ui.components.EntryCard
+import com.jtx.desktop.ui.components.SearchBar
 
 @Composable
 fun NotesScreen(repository: NoteRepository) {
@@ -24,31 +25,52 @@ fun NotesScreen(repository: NoteRepository) {
     }
     var selectedNote by remember { mutableStateOf<CombinedEntry?>(null) }
     var isEditing by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 8.dp)
-    ) {
-        items(notes, key = { it.id }) { note ->
-            EntryCard(
-                entry = note,
-                onClick = { selectedNote = note }
-            )
+    val filteredNotes = remember(notes, searchQuery) {
+        if (searchQuery.isBlank()) {
+            notes
+        } else {
+            notes.filter { entry ->
+                entry.title.contains(searchQuery, ignoreCase = true) ||
+                entry.description.contains(searchQuery, ignoreCase = true) ||
+                entry.categories.any { it.contains(searchQuery, ignoreCase = true) }
+            }
         }
+    }
 
-        if (notes.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No notes yet",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+    Column(modifier = Modifier.fillMaxSize()) {
+        SearchBar(
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            placeholder = "Search notes..."
+        )
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            items(filteredNotes, key = { it.id }) { note ->
+                EntryCard(
+                    entry = note,
+                    onClick = { selectedNote = note }
+                )
+            }
+
+            if (filteredNotes.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (searchQuery.isNotBlank()) "No notes found" else "No notes yet",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
