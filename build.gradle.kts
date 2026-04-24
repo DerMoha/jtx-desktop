@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
     kotlin("multiplatform") version "2.3.20"
@@ -9,6 +10,10 @@ plugins {
 
 group = "com.jtx.desktop"
 version = "1.0.0"
+
+val composeJavaHome = providers.gradleProperty("compose.java.home")
+    .orElse(providers.environmentVariable("JAVA_HOME"))
+    .orNull
 
 repositories {
     mavenCentral()
@@ -40,7 +45,6 @@ kotlin {
                 implementation(compose.desktop.common)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
                 implementation("com.google.code.gson:gson:2.11.0")
-                implementation("org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.9.47")
             }
         }
     }
@@ -55,7 +59,27 @@ configurations.all {
 compose {
     desktop {
         application {
+            if (composeJavaHome != null) {
+                javaHome = composeJavaHome
+            }
             mainClass = "com.jtx.desktop.MainKt"
+            nativeDistributions {
+                targetFormats(
+                    TargetFormat.Dmg,
+                    TargetFormat.Exe,
+                    TargetFormat.Deb,
+                    TargetFormat.Rpm,
+                )
+                packageName = "jtx-desktop"
+                packageVersion = project.version.toString()
+                description = "JTX Desktop"
+                vendor = "JTX"
+                modules("java.instrument", "java.prefs", "jdk.unsupported")
+
+                macOS {
+                    bundleID = "com.jtx.desktop"
+                }
+            }
         }
     }
 }
