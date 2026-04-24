@@ -4,27 +4,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            artifact_name: macos-dmg
-            gradle_task: packageDmg
-            artifact_path: build/compose/binaries/main/dmg/*.dmg
-          - os: windows-latest
-            artifact_name: windows-exe
-            gradle_task: packageExe
-            artifact_path: build/compose/binaries/main/exe/*.exe
-          - os: ubuntu-latest
-            artifact_name: linux-packages
-            gradle_task: packageDeb packageRpm
-            artifact_path: |
-              build/compose/binaries/main/deb/*.deb
-              build/compose/binaries/main/rpm/*.rpm
-
-    runs-on: ${{ matrix.os }}
+  macos:
+    runs-on: macos-14
 
     steps:
       - name: Check out repository
@@ -39,18 +20,26 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build native distribution
+      - name: Build macOS app
         shell: bash
-        run: ./gradlew ${{ matrix.gradle_task }}
+        run: ./gradlew createDistributable
 
-      - name: Upload native artifacts
+      - name: Archive macOS app
+        shell: bash
+        run: |
+          appDir="build/compose/binaries/main/app/jtx-desktop.app"
+          zipPath="build/compose/binaries/main/app/jtx-desktop-macos.zip"
+          cd "$(dirname "$appDir")"
+          zip -r "$zipPath" "$(basename "$appDir")" -x "*.DS_Store"
+
+      - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          name: macos
+          path: build/compose/binaries/main/app/jtx-desktop-macos.zip
           if-no-files-found: error
 
-  windows-portable:
+  windows:
     runs-on: windows-latest
 
     steps:
@@ -66,23 +55,57 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build portable app image
+      - name: Build Windows app
         shell: bash
         run: ./gradlew createDistributable
 
-      - name: Archive portable Windows app
+      - name: Archive Windows app
         shell: pwsh
         run: |
           $appDir = "build/compose/binaries/main/app/jtx-desktop"
           $zipPath = "build/compose/binaries/main/app/jtx-desktop-windows-portable.zip"
           if (-not (Test-Path $appDir)) {
-            throw "Portable app directory not found: $appDir"
+            throw "App directory not found: $appDir"
           }
           Compress-Archive -Path "$appDir\*" -DestinationPath $zipPath -Force
 
-      - name: Upload portable Windows artifact
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-portable
+          name: windows
           path: build/compose/binaries/main/app/jtx-desktop-windows-portable.zip
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Linux app
+        shell: bash
+        run: ./gradlew createDistributable
+
+      - name: Archive Linux app
+        shell: bash
+        run: |
+          appDir="build/compose/binaries/main/app/jtx-desktop"
+          zipPath="build/compose/binaries/main/app/jtx-desktop-linux.tar.gz"
+          tar -czf "$zipPath" -C "$(dirname "$appDir")" "$(basename "$appDir")"
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: build/compose/binaries/main/app/jtx-desktop-linux.tar.gz
           if-no-files-found: error
