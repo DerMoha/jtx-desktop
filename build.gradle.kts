@@ -74,7 +74,7 @@ compose {
                 packageVersion = project.version.toString()
                 description = "JTX Desktop"
                 vendor = "JTX"
-                modules("java.instrument", "java.prefs", "jdk.unsupported")
+                includeAllModules = true
 
                 macOS {
                     bundleID = "com.jtx.desktop"
