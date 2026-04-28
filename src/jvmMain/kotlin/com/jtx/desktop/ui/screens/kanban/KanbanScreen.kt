@@ -16,12 +16,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.domain.model.CombinedEntry
 import com.jtx.desktop.domain.model.EntryType
 import com.jtx.desktop.domain.model.KanbanColumnConfig
+import kotlin.math.roundToInt
 
 data class KanbanColumn(
     val config: KanbanColumnConfig,
@@ -59,8 +61,7 @@ fun KanbanScreen(
         }
     }
 
-    var draggedEntry by remember { mutableStateOf<CombinedEntry?>(null) }
-    var dragTargetColumn by remember { mutableStateOf<String?>(null) }
+    val columnStepPx = with(LocalDensity.current) { 296.dp.toPx() }
 
     LazyRow(
         modifier = Modifier.fillMaxSize(),
@@ -72,21 +73,14 @@ fun KanbanScreen(
             KanbanColumnCard(
                 column = column,
                 onEntryClick = { entry -> },
-                onDragOver = { dragTargetColumn = column.config.id },
-                onDragLeave = { if (dragTargetColumn == column.config.id) dragTargetColumn = null },
-                onDrop = { entry ->
-                    val targetColumn = columns.find { it.config.id == dragTargetColumn } ?: column
-                    val newProgress = when {
-                        targetColumn.config.progressMax == 0 -> 0
-                        targetColumn.config.progressMin == 100 -> 100
-                        else -> 50
+                onEntryDragEnd = { entry, offsetX ->
+                    val columnOffset = (offsetX / columnStepPx).roundToInt()
+                    val targetIndex = (columnIndex + columnOffset).coerceIn(columns.indices)
+                    if (targetIndex != columnIndex) {
+                        onTaskMove(entry.id, progressForColumn(columns[targetIndex].config))
                     }
-                    onTaskMove(entry.id, newProgress)
-                    dragTargetColumn = null
-                    draggedEntry = null
                 },
-                isDropTarget = dragTargetColumn == column.config.id,
-                onDragStart = { draggedEntry = it }
+                isDropTarget = false
             )
         }
     }
@@ -96,11 +90,8 @@ fun KanbanScreen(
 fun KanbanColumnCard(
     column: KanbanColumn,
     onEntryClick: (CombinedEntry) -> Unit,
-    onDragOver: () -> Unit,
-    onDragLeave: () -> Unit,
-    onDrop: (CombinedEntry) -> Unit,
+    onEntryDragEnd: (CombinedEntry, Float) -> Unit,
     isDropTarget: Boolean = false,
-    onDragStart: (CombinedEntry) -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -148,7 +139,7 @@ fun KanbanColumnCard(
                     DraggableEntryCard(
                         entry = entry,
                         onClick = { onEntryClick(entry) },
-                        onDragStart = { onDragStart(entry) }
+                        onDragEnd = { offsetX -> onEntryDragEnd(entry, offsetX) }
                     )
                 }
             }
@@ -160,7 +151,7 @@ fun KanbanColumnCard(
 fun DraggableEntryCard(
     entry: CombinedEntry,
     onClick: () -> Unit,
-    onDragStart: () -> Unit
+    onDragEnd: (Float) -> Unit
 ) {
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
@@ -178,9 +169,9 @@ fun DraggableEntryCard(
                 detectDragGestures(
                     onDragStart = {
                         isDragging = true
-                        onDragStart()
                     },
                     onDragEnd = {
+                        onDragEnd(offsetX)
                         isDragging = false
                         offsetX = 0f
                         offsetY = 0f
@@ -235,3 +226,9 @@ private val defaultColumns = listOf(
     KanbanColumnConfig("inprogress", "In Progress", 0xFFFFC107, 1, 99),
     KanbanColumnConfig("done", "Done", 0xFF4CAF50, 100, 100)
 )
+
+private fun progressForColumn(config: KanbanColumnConfig): Int = when {
+    config.progressMax <= 0 -> 0
+    config.progressMin >= 100 -> 100
+    else -> ((config.progressMin + config.progressMax) / 2).coerceIn(0, 100)
+}
