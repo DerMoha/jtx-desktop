@@ -18,6 +18,10 @@ import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
 import com.jtx.desktop.ui.components.EntryCard
 import com.jtx.desktop.ui.components.SearchBar
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -410,8 +414,8 @@ fun TaskEditDialog(
 ) {
     var title by remember { mutableStateOf(entry.title) }
     var description by remember { mutableStateOf(entry.description) }
-    var dueDate by remember { mutableStateOf(entry.date?.toString().orEmpty()) }
-    var startDate by remember { mutableStateOf(entry.startDate?.toString().orEmpty()) }
+    var dueDate by remember { mutableStateOf(entry.date?.toDateTimeInput().orEmpty()) }
+    var startDate by remember { mutableStateOf(entry.startDate?.toDateTimeInput().orEmpty()) }
     var completed by remember { mutableStateOf(entry.completed == true) }
     var progress by remember { mutableIntStateOf(entry.progress ?: 0) }
     var descriptionFormat by remember { mutableStateOf(entry.descriptionFormat) }
@@ -470,15 +474,17 @@ fun TaskEditDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = startDate,
-                    onValueChange = { startDate = it.filter(Char::isDigit) },
-                    label = { Text("Start timestamp") },
+                    onValueChange = { startDate = it },
+                    label = { Text("Start date/time") },
+                    supportingText = { Text("Blank clears. Use yyyy-MM-dd, yyyy-MM-dd HH:mm, ISO, or millis.") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = dueDate,
-                    onValueChange = { dueDate = it.filter(Char::isDigit) },
-                    label = { Text("Due timestamp") },
+                    onValueChange = { dueDate = it },
+                    label = { Text("Due date/time") },
+                    supportingText = { Text("Blank clears. ISO values can include timezone or Z.") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -619,8 +625,8 @@ fun TaskEditDialog(
                         title = title,
                         description = description,
                         descriptionFormat = descriptionFormat,
-                        date = dueDate.toLongOrNull(),
-                        startDate = startDate.toLongOrNull(),
+                        date = dueDate.parseDateTimeInput(),
+                        startDate = startDate.parseDateTimeInput(),
                         completed = completed,
                         progress = progress,
                         priority = priority,
@@ -648,6 +654,20 @@ fun TaskEditDialog(
 }
 
 private fun String.toCsvList(): List<String> = split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+private fun Long.toDateTimeInput(): String = Instant.ofEpochMilli(this)
+    .atZone(ZoneId.systemDefault())
+    .toLocalDateTime()
+    .toString()
+
+private fun String.parseDateTimeInput(): Long? {
+    val value = trim()
+    if (value.isEmpty()) return null
+    value.toLongOrNull()?.let { return it }
+    return runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
+        ?: runCatching { LocalDateTime.parse(value.replace(' ', 'T')).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull()
+        ?: runCatching { LocalDate.parse(value).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull()
+}
 
 private fun String.toSubtasks(existing: List<Subtask>): List<Subtask> = lines()
     .map { it.trim() }
