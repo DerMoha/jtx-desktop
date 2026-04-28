@@ -70,7 +70,9 @@ fun TasksScreen(
     }
 
     val filteredTasks = remember(tasks, searchQuery, sortOrder, showArchived, taskFilter) {
+        val now = System.currentTimeMillis()
         var base = if (showArchived) tasks.filter { it.archived } else tasks.filter { !it.archived }
+        base = base.map { it.withNextRecurrenceDate(now) }
         base = when (taskFilter) {
             TaskFilter.ALL -> base
             TaskFilter.COMPLETED -> base.filter { it.completed == true }
@@ -360,6 +362,13 @@ fun TaskDetailDialog(
                 if (entry.date != null) {
                     Text(
                         "Due: ${formatDate(entry.date)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                entry.recurrenceRule?.let { recurrenceRule ->
+                    Text(
+                        "Repeats: ${recurrenceRule.toDisplayText()}",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -791,6 +800,52 @@ private fun Long.toDateTimeInput(): String = Instant.ofEpochMilli(this)
     .atZone(ZoneId.systemDefault())
     .toLocalDateTime()
     .toString()
+
+private fun CombinedEntry.withNextRecurrenceDate(now: Long): CombinedEntry {
+    val recurrenceRule = recurrenceRule ?: return this
+    val firstDate = date ?: return this
+    if (firstDate >= now) return this
+
+    var occurrence = firstDate
+    var occurrenceCount = 1
+    while (occurrence < now) {
+        val next = recurrenceRule.nextOccurrenceAfter(occurrence)
+        if (next <= occurrence) return this
+        occurrence = next
+        occurrenceCount++
+        if (recurrenceRule.count != null && occurrenceCount > recurrenceRule.count) return this
+        if (recurrenceRule.endDate != null && occurrence > recurrenceRule.endDate) return this
+    }
+
+    return copy(date = occurrence)
+}
+
+private fun RecurrenceRule.nextOccurrenceAfter(timestamp: Long): Long {
+    val calendar = Calendar.getInstance().apply { timeInMillis = timestamp }
+    val interval = interval.coerceAtLeast(1)
+    when (frequency) {
+        RecurrenceFrequency.DAILY -> calendar.add(Calendar.DAY_OF_YEAR, interval)
+        RecurrenceFrequency.WEEKLY -> calendar.add(Calendar.WEEK_OF_YEAR, interval)
+        RecurrenceFrequency.MONTHLY -> calendar.add(Calendar.MONTH, interval)
+        RecurrenceFrequency.YEARLY -> calendar.add(Calendar.YEAR, interval)
+    }
+    return calendar.timeInMillis
+}
+
+private fun RecurrenceRule.toDisplayText(): String {
+    rawRule?.takeIf { it.isNotBlank() }?.let { return it }
+    val base = when (frequency) {
+        RecurrenceFrequency.DAILY -> "day"
+        RecurrenceFrequency.WEEKLY -> "week"
+        RecurrenceFrequency.MONTHLY -> "month"
+        RecurrenceFrequency.YEARLY -> "year"
+    }
+    val intervalText = if (interval > 1) "every $interval ${base}s" else "every $base"
+    val parts = mutableListOf(intervalText)
+    count?.let { parts += "$it times" }
+    endDate?.let { parts += "until ${it.toDateTimeInput()}" }
+    return parts.joinToString(", ")
+}
 
 private fun String.parseDateTimeInput(): Long? {
     val value = trim()
