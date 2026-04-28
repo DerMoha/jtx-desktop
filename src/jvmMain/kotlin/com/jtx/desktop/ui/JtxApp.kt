@@ -2,11 +2,14 @@ package com.jtx.desktop.ui
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.CheckCircle as CheckCircleIcon
@@ -143,6 +146,7 @@ fun JtxApp(
     var isOffline by remember { mutableStateOf(false) }
     var searchFocused by remember { mutableStateOf(focusSearch) }
     var searchFocusRequest by remember { mutableStateOf(0) }
+    var showGlobalSearch by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var syncConflicts by remember { mutableStateOf<List<SyncRepository.SyncConflictInfo>>(emptyList()) }
     var allEntries by remember { mutableStateOf<List<CombinedEntry>>(emptyList()) }
@@ -714,6 +718,9 @@ fun JtxApp(
                                 Text("Undo", color = MaterialTheme.colorScheme.onPrimary)
                             }
                         }
+                        IconButton(onClick = { showGlobalSearch = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Global search", tint = MaterialTheme.colorScheme.onPrimary)
+                        }
                         IconButton(onClick = { syncNow() }) {
                             Icon(syncStateIcon, contentDescription = "Sync", tint = MaterialTheme.colorScheme.onPrimary)
                         }
@@ -841,6 +848,18 @@ fun JtxApp(
             )
         }
 
+        if (showGlobalSearch) {
+            GlobalSearchDialog(
+                entries = allEntries,
+                onDismiss = { showGlobalSearch = false },
+                onOpenEntry = { entry ->
+                    selectedTab = entry.type.toTab()
+                    entryToOpen = entry
+                    showGlobalSearch = false
+                }
+            )
+        }
+
         syncConflicts.firstOrNull()?.let { conflict ->
             AlertDialog(
                 onDismissRequest = {},
@@ -917,6 +936,77 @@ private fun Any.conflictTitle(): String = when (this) {
     is NoteEntry -> "note \"$title\""
     is TaskEntry -> "task \"$title\""
     else -> "entry"
+}
+
+@Composable
+private fun GlobalSearchDialog(
+    entries: List<CombinedEntry>,
+    onDismiss: () -> Unit,
+    onOpenEntry: (CombinedEntry) -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    val results = remember(entries, query) {
+        entries
+            .filter { entry -> query.isBlank() || entry.matchesGlobalSearch(query) }
+            .sortedWith(compareBy<CombinedEntry> { it.type.name }.thenBy { it.title.lowercase() })
+            .take(50)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Global Search") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("Search entries") },
+                    supportingText = { Text("Searches titles, descriptions, categories, and locations") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                    items(results, key = { "${it.type}-${it.id}" }) { entry ->
+                        ListItem(
+                            headlineContent = { Text(entry.title.ifBlank { "(No title)" }) },
+                            supportingContent = {
+                                Text(
+                                    listOfNotNull(
+                                        entry.type.name.lowercase(),
+                                        entry.location,
+                                        entry.categories.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                                    ).joinToString(" - ")
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            trailingContent = {
+                                TextButton(onClick = { onOpenEntry(entry) }) {
+                                    Text("Open")
+                                }
+                            }
+                        )
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+private fun CombinedEntry.matchesGlobalSearch(query: String): Boolean {
+    val terms = query.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    return terms.all { term ->
+        title.contains(term, ignoreCase = true) ||
+            description.contains(term, ignoreCase = true) ||
+            location?.contains(term, ignoreCase = true) == true ||
+            categories.any { it.contains(term, ignoreCase = true) }
+    }
 }
 
 private suspend fun chooseFile(title: String, mode: Int, defaultFile: String): File? = withContext(Dispatchers.IO) {
