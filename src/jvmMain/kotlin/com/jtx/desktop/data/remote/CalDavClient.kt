@@ -211,19 +211,19 @@ class ICalendarParser {
                 if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
                 when {
                     line.isProperty("UID") -> uid = line.propertyValue()
-                    line.isProperty("SUMMARY") -> summary = line.propertyValue()
+                    line.isProperty("SUMMARY") -> summary = line.propertyTextValue()
                     line.isProperty("DESCRIPTION") -> {
-                        val value = line.substringAfter(":").trim()
+                        val value = line.propertyTextValue()
                         if (description.isEmpty()) description = value else description += value
                     }
                     line.isProperty("DTSTART") -> dtstart = parseIcsDate(line)
                     line.isProperty("DTEND") -> dtend = parseIcsDate(line)
-                    line.isProperty("CATEGORIES") -> categories = line.propertyValue().split(",").map { it.trim() }.toMutableList()
+                    line.isProperty("CATEGORIES") -> categories = parseIcsTextList(line.propertyValue()).toMutableList()
                     line.isProperty("CREATED") -> created = parseIcsDate(line)
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
                     line.isProperty("COMMENT") -> {
-                        val text = line.propertyValue()
+                        val text = line.propertyTextValue()
                         comment = comment ?: text
                         comments = comments + EntryComment(text)
                     }
@@ -282,9 +282,9 @@ class ICalendarParser {
                 if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
                 when {
                     line.isProperty("UID") -> uid = line.propertyValue()
-                    line.isProperty("SUMMARY") -> summary = line.propertyValue()
+                    line.isProperty("SUMMARY") -> summary = line.propertyTextValue()
                     line.isProperty("DESCRIPTION") -> {
-                        val value = line.substringAfter(":").trim()
+                        val value = line.propertyTextValue()
                         if (description.isEmpty()) description = value else description += value
                     }
                     line.isProperty("DUE") -> due = parseIcsDate(line)
@@ -305,14 +305,14 @@ class ICalendarParser {
                         recurrenceId = parseIcsDate(line)
                         recurrenceIdTimezone = parseTimezone(line)
                     }
-                    line.isProperty("CATEGORIES") -> categories = line.propertyValue().split(",").map { it.trim() }.toMutableList()
+                    line.isProperty("CATEGORIES") -> categories = parseIcsTextList(line.propertyValue()).toMutableList()
                     line.isProperty("CREATED") -> created = parseIcsDate(line)
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
-                    line.isProperty("LOCATION") -> location = line.propertyValue()
+                    line.isProperty("LOCATION") -> location = line.propertyTextValue()
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
                     line.isProperty("RELATED-TO") -> relatedEntries = relatedEntries + line.propertyValue()
                     line.isProperty("ATTACH") -> attachments = attachments + parseAttachment(line)
-                    line.isProperty("COMMENT") -> comments = comments + EntryComment(line.propertyValue())
+                    line.isProperty("COMMENT") -> comments = comments + EntryComment(line.propertyTextValue())
                 }
             }
 
@@ -354,19 +354,19 @@ class ICalendarParser {
                 if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
                 when {
                     line.isProperty("UID") -> uid = line.propertyValue()
-                    line.isProperty("SUMMARY") -> summary = line.propertyValue()
+                    line.isProperty("SUMMARY") -> summary = line.propertyTextValue()
                     line.isProperty("DESCRIPTION") -> {
-                        val value = line.substringAfter(":").trim()
+                        val value = line.propertyTextValue()
                         if (description.isEmpty()) description = value else description += value
                     }
-                    line.isProperty("CATEGORIES") -> categories = line.propertyValue().split(",").map { it.trim() }.toMutableList()
+                    line.isProperty("CATEGORIES") -> categories = parseIcsTextList(line.propertyValue()).toMutableList()
                     line.isProperty("CREATED") -> created = parseIcsDate(line)
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
                     line.isProperty("COLOR") -> color = line.propertyValue()
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
                     line.isProperty("RELATED-TO") -> relatedEntries = relatedEntries + line.propertyValue()
                     line.isProperty("ATTACH") -> attachments = attachments + parseAttachment(line)
-                    line.isProperty("COMMENT") -> comments = comments + EntryComment(line.propertyValue())
+                    line.isProperty("COMMENT") -> comments = comments + EntryComment(line.propertyTextValue())
                 }
             }
 
@@ -401,13 +401,13 @@ class ICalendarParser {
             appendLine("DTSTAMP:${formatIcsDate(entry.updated)}")
             if (entry.dtstart != null) appendLine("DTSTART:${formatIcsDate(entry.dtstart)}")
             if (entry.dtend != null) appendLine("DTEND:${formatIcsDate(entry.dtend)}")
-            appendLine("SUMMARY:${entry.title}")
-            if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description}")
-            if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",")}")
+            appendLine("SUMMARY:${entry.title.escapeIcsText()}")
+            if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description.escapeIcsText()}")
+            if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",") { it.escapeIcsText() }}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
             entry.comments.ifEmpty { entry.comment?.let { listOf(EntryComment(it)) } ?: emptyList() }
-                .forEach { appendLine("COMMENT:${it.text}") }
+                .forEach { appendLine("COMMENT:${it.text.escapeIcsText()}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
             entry.unknownProperties.forEach { appendLine(it.line) }
@@ -429,8 +429,8 @@ class ICalendarParser {
             appendLine("DTSTAMP:${formatIcsDate(entry.updated)}")
             if (entry.start != null) appendLine("DTSTART:${formatIcsDate(entry.start)}")
             if (entry.due != null) appendLine("DUE:${formatIcsDate(entry.due)}")
-            appendLine("SUMMARY:${entry.title}")
-            if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description}")
+            appendLine("SUMMARY:${entry.title.escapeIcsText()}")
+            if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description.escapeIcsText()}")
             if (entry.completed) appendLine("STATUS:COMPLETED")
             appendLine("PERCENT-COMPLETE:${entry.progress}")
             if (entry.priority != Priority.NONE) appendLine("PRIORITY:${entry.priority.toIcsPriority()}")
@@ -438,10 +438,10 @@ class ICalendarParser {
             if (entry.recurrenceDates.isNotEmpty()) appendLine("RDATE${entry.recurrenceTimezone.toIcsTimezoneParam()}:${entry.recurrenceDates.joinToString(",") { formatIcsDate(it) }}")
             if (entry.exceptionDates.isNotEmpty()) appendLine("EXDATE${entry.recurrenceTimezone.toIcsTimezoneParam()}:${entry.exceptionDates.joinToString(",") { formatIcsDate(it) }}")
             if (entry.recurrenceId != null) appendLine("RECURRENCE-ID${entry.recurrenceIdTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.recurrenceId)}")
-            if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",")}")
+            if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",") { it.escapeIcsText() }}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
-            entry.comments.forEach { appendLine("COMMENT:${it.text}") }
+            entry.comments.forEach { appendLine("COMMENT:${it.text.escapeIcsText()}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
             entry.unknownProperties.forEach { appendLine(it.line) }
@@ -461,12 +461,12 @@ class ICalendarParser {
             appendLine("BEGIN:VNOTE")
             appendLine("UID:${entry.uid}")
             appendLine("DTSTAMP:${formatIcsDate(entry.updated)}")
-            appendLine("SUMMARY:${entry.title}")
-            if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description}")
-            if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",")}")
+            appendLine("SUMMARY:${entry.title.escapeIcsText()}")
+            if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description.escapeIcsText()}")
+            if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",") { it.escapeIcsText() }}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
-            entry.comments.forEach { appendLine("COMMENT:${it.text}") }
+            entry.comments.forEach { appendLine("COMMENT:${it.text.escapeIcsText()}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
             entry.unknownProperties.forEach { appendLine(it.line) }
@@ -519,7 +519,67 @@ class ICalendarParser {
 
     private fun String.propertyValue(): String = substringAfter(":").trim()
 
+    private fun String.propertyTextValue(): String = propertyValue().unescapeIcsText()
+
     private fun propertyName(line: String): String = line.substringBefore(":").substringBefore(";").uppercase()
+
+    private fun parseIcsTextList(value: String): List<String> {
+        val values = mutableListOf<String>()
+        val current = StringBuilder()
+        var escaping = false
+        for (char in value) {
+            when {
+                escaping -> {
+                    current.append('\\').append(char)
+                    escaping = false
+                }
+                char == '\\' -> escaping = true
+                char == ',' -> {
+                    values.add(current.toString().trim().unescapeIcsText())
+                    current.clear()
+                }
+                else -> current.append(char)
+            }
+        }
+        if (escaping) current.append('\\')
+        values.add(current.toString().trim().unescapeIcsText())
+        return values.filter { it.isNotEmpty() }
+    }
+
+    private fun String.unescapeIcsText(): String {
+        val result = StringBuilder()
+        var escaping = false
+        for (char in this) {
+            if (escaping) {
+                result.append(
+                    when (char) {
+                        'n', 'N' -> '\n'
+                        '\\', ';', ',' -> char
+                        else -> char
+                    }
+                )
+                escaping = false
+            } else if (char == '\\') {
+                escaping = true
+            } else {
+                result.append(char)
+            }
+        }
+        if (escaping) result.append('\\')
+        return result.toString()
+    }
+
+    private fun String.escapeIcsText(): String = buildString {
+        for (char in this@escapeIcsText) {
+            when (char) {
+                '\\' -> append("\\\\")
+                '\n' -> append("\\n")
+                ';' -> append("\\;")
+                ',' -> append("\\,")
+                else -> append(char)
+            }
+        }
+    }
 
     private fun parseRecurrenceRule(value: String): RecurrenceRule? {
         val parts = value.split(";").mapNotNull { part ->
