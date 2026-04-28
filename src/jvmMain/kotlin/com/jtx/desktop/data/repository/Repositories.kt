@@ -109,6 +109,11 @@ class NoteRepository(private val local: LocalDataSource) {
                 modified = note.updated,
                 categories = note.categories,
                 color = note.color,
+                descriptionFormat = note.descriptionFormat,
+                location = note.location,
+                comments = note.comments,
+                attachments = note.attachments,
+                relatedEntries = note.relatedEntries,
                 progress = null,
                 completed = null,
                 archived = note.archived,
@@ -133,6 +138,13 @@ class NoteRepository(private val local: LocalDataSource) {
         val updatedEntry = existing.copy(
             title = combined.title,
             description = combined.description,
+            descriptionFormat = combined.descriptionFormat,
+            categories = combined.categories,
+            color = combined.color,
+            location = combined.location,
+            comments = combined.comments,
+            attachments = combined.attachments,
+            relatedEntries = combined.relatedEntries,
             archived = combined.archived,
             updated = now
         )
