@@ -26,6 +26,8 @@ import com.jtx.desktop.data.repository.NoteRepository
 import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.data.repository.TemplateRepository
 import com.jtx.desktop.domain.model.*
+import com.jtx.desktop.ui.desktop.TrayManager
+import com.jtx.desktop.ui.desktop.TrayStatus
 import kotlinx.coroutines.launch
 
 enum class Tab(val title: String, val icon: ImageVector) {
@@ -71,7 +73,10 @@ enum class UndoType {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun JtxApp(syncRepository: SyncRepository) {
+fun JtxApp(
+    syncRepository: SyncRepository,
+    trayManager: TrayManager? = null
+) {
     val journalRepository = remember { JournalRepository(syncRepository.localDataSource) }
     val noteRepository = remember { NoteRepository(syncRepository.localDataSource) }
     val taskRepository = remember { TaskRepository(syncRepository.localDataSource) }
@@ -85,6 +90,7 @@ fun JtxApp(syncRepository: SyncRepository) {
     var sortOrder by remember { mutableStateOf(SortOrder.DATE_DESC) }
     var showArchived by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
+    var isOffline by remember { mutableStateOf(false) }
 
     val undoManager = remember { UndoManager<UndoAction>() }
     val scope = rememberCoroutineScope()
@@ -101,6 +107,20 @@ fun JtxApp(syncRepository: SyncRepository) {
                 SortField.MODIFIED -> if (it.sortPreference.ascending) SortOrder.MODIFIED_ASC else SortOrder.MODIFIED_DESC
             }
         }
+    }
+
+    LaunchedEffect(syncState) {
+        trayManager?.updateStatus(
+            when {
+                isOffline -> TrayStatus.OFFLINE
+                else -> when (syncState) {
+                    SyncState.IDLE -> TrayStatus.IDLE
+                    SyncState.SYNCING -> TrayStatus.SYNCING
+                    SyncState.SUCCESS -> TrayStatus.SUCCESS
+                    SyncState.ERROR -> TrayStatus.ERROR
+                }
+            }
+        )
     }
 
     val isDarkTheme = when (darkModePreference) {
@@ -126,6 +146,17 @@ fun JtxApp(syncRepository: SyncRepository) {
                         titleContentColor = MaterialTheme.colorScheme.onPrimary
                     ),
                     actions = {
+                        if (isOffline) {
+                            AssistChip(
+                                onClick = {},
+                                label = { Text("Offline") },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    labelColor = MaterialTheme.colorScheme.onErrorContainer
+                                ),
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                        }
                         if (undoManager.canUndo()) {
                             TextButton(onClick = {
                                 val action = undoManager.undo()
