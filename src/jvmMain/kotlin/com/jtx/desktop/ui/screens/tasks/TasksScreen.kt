@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jtx.desktop.data.local.AttachmentCache
 import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
@@ -765,7 +766,7 @@ fun TaskEditDialog(
                         location = location.ifBlank { null },
                         subtasks = subtasks.toSubtasks(entry.subtasks),
                         comments = comments.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { EntryComment(it) },
-                        attachments = attachments.toCsvList().map { EntryAttachment(uri = it) },
+                        attachments = attachments.toAttachments(),
                         relatedEntries = relatedEntries.toTokenList()
                     )
                 )
@@ -782,6 +783,8 @@ fun TaskEditDialog(
 }
 
 private fun String.toCsvList(): List<String> = split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+private fun String.toAttachments(): List<EntryAttachment> = toCsvList().map { AttachmentCache.cacheUri(it) }
 
 private fun String.toTokenList(): List<String> = split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
 
