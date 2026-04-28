@@ -47,6 +47,7 @@ fun TasksScreen(
     showArchived: Boolean = false,
     listDensity: ListDensity = ListDensity.COMFORTABLE,
     collectionFilter: String? = null,
+    markdownPreviewEnabled: Boolean = true,
     searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
@@ -288,6 +289,7 @@ fun TasksScreen(
         TaskDetailDialog(
             entry = selectedTask!!,
             relatedEntries = relatedEntriesFor(selectedTask!!, allEntries),
+            markdownPreviewEnabled = markdownPreviewEnabled,
             onRelatedEntryClick = { relatedEntry ->
                 if (relatedEntry.type == EntryType.TASK) {
                     selectedTask = relatedEntry
@@ -346,6 +348,7 @@ fun TasksScreen(
 fun TaskDetailDialog(
     entry: CombinedEntry,
     relatedEntries: List<CombinedEntry> = emptyList(),
+    markdownPreviewEnabled: Boolean = true,
     onRelatedEntryClick: (CombinedEntry) -> Unit = {},
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
@@ -363,7 +366,7 @@ fun TaskDetailDialog(
         text = {
             Column {
                 if (entry.description.isNotEmpty()) {
-                    MarkdownText(entry.description, entry.descriptionFormat)
+                    MarkdownText(entry.description, entry.descriptionFormat, previewEnabled = markdownPreviewEnabled)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 if (entry.date != null) {

@@ -37,6 +37,7 @@ fun NotesScreen(
     showArchived: Boolean = false,
     listDensity: ListDensity = ListDensity.COMFORTABLE,
     collectionFilter: String? = null,
+    markdownPreviewEnabled: Boolean = true,
     searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
@@ -175,6 +176,7 @@ fun NotesScreen(
         NoteDetailDialog(
             entry = selectedNote!!,
             relatedEntries = relatedEntriesFor(selectedNote!!, allEntries),
+            markdownPreviewEnabled = markdownPreviewEnabled,
             onRelatedEntryClick = { relatedEntry ->
                 if (relatedEntry.type == EntryType.NOTE) {
                     selectedNote = relatedEntry
@@ -227,6 +229,7 @@ fun NotesScreen(
 fun NoteDetailDialog(
     entry: CombinedEntry,
     relatedEntries: List<CombinedEntry> = emptyList(),
+    markdownPreviewEnabled: Boolean = true,
     onRelatedEntryClick: (CombinedEntry) -> Unit = {},
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
@@ -242,7 +245,7 @@ fun NoteDetailDialog(
         text = {
             Column {
                 if (entry.description.isNotEmpty()) {
-                    MarkdownText(entry.description, entry.descriptionFormat)
+                    MarkdownText(entry.description, entry.descriptionFormat, previewEnabled = markdownPreviewEnabled)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 if (entry.categories.isNotEmpty()) {

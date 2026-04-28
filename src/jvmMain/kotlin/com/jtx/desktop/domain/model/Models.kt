@@ -256,7 +256,8 @@ data class AppSettings(
     val notificationsEnabled: Boolean = true,
     val quietHoursEnabled: Boolean = false,
     val quietHoursStart: String = "22:00",
-    val quietHoursEnd: String = "07:00"
+    val quietHoursEnd: String = "07:00",
+    val markdownPreviewEnabled: Boolean = true
 )
 
 @Serializable

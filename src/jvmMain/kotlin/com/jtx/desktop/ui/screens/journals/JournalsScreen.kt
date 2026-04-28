@@ -43,6 +43,7 @@ fun JournalsScreen(
     showArchived: Boolean = false,
     listDensity: ListDensity = ListDensity.COMFORTABLE,
     collectionFilter: String? = null,
+    markdownPreviewEnabled: Boolean = true,
     searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
@@ -181,6 +182,7 @@ fun JournalsScreen(
         JournalDetailDialog(
             entry = selectedEntry!!,
             relatedEntries = relatedEntriesFor(selectedEntry!!, allEntries),
+            markdownPreviewEnabled = markdownPreviewEnabled,
             onRelatedEntryClick = { relatedEntry ->
                 if (relatedEntry.type == EntryType.JOURNAL) {
                     selectedEntry = relatedEntry
@@ -233,6 +235,7 @@ fun JournalsScreen(
 fun JournalDetailDialog(
     entry: CombinedEntry,
     relatedEntries: List<CombinedEntry> = emptyList(),
+    markdownPreviewEnabled: Boolean = true,
     onRelatedEntryClick: (CombinedEntry) -> Unit = {},
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
@@ -248,7 +251,7 @@ fun JournalDetailDialog(
         text = {
             Column {
                 if (entry.description.isNotEmpty()) {
-                    MarkdownText(entry.description, entry.descriptionFormat)
+                    MarkdownText(entry.description, entry.descriptionFormat, previewEnabled = markdownPreviewEnabled)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 if (entry.date != null) {

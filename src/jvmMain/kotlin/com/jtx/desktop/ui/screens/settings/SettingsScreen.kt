@@ -63,6 +63,7 @@ fun SettingsScreen(
     var quietHoursEnabled by remember { mutableStateOf(settings.quietHoursEnabled) }
     var quietHoursStart by remember { mutableStateOf(settings.quietHoursStart) }
     var quietHoursEnd by remember { mutableStateOf(settings.quietHoursEnd) }
+    var markdownPreviewEnabled by remember { mutableStateOf(settings.markdownPreviewEnabled) }
 
     LaunchedEffect(Unit) {
         settings = syncRepository.getSettings()
@@ -77,6 +78,7 @@ fun SettingsScreen(
         quietHoursEnabled = settings.quietHoursEnabled
         quietHoursStart = settings.quietHoursStart
         quietHoursEnd = settings.quietHoursEnd
+        markdownPreviewEnabled = settings.markdownPreviewEnabled
         discoveredCollections = syncRepository.localDataSource.getAllCollections().first()
         isLoading = false
     }
@@ -345,6 +347,31 @@ fun SettingsScreen(
             }
         }
 
+        HorizontalDivider()
+
+        Text(
+            text = "Markdown",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Preview markdown descriptions", style = MaterialTheme.typography.labelLarge)
+                    Text("When disabled, markdown entries show their raw text in detail views", style = MaterialTheme.typography.bodySmall)
+                }
+                Switch(checked = markdownPreviewEnabled, onCheckedChange = { markdownPreviewEnabled = it })
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -374,7 +401,8 @@ fun SettingsScreen(
                                 notificationsEnabled = notificationsEnabled,
                                 quietHoursEnabled = quietHoursEnabled,
                                 quietHoursStart = quietHoursStart,
-                                quietHoursEnd = quietHoursEnd
+                                quietHoursEnd = quietHoursEnd,
+                                markdownPreviewEnabled = markdownPreviewEnabled
                             )
                         )
                         kanbanColumns = kanbanColumns.normalizedKanbanColumns()

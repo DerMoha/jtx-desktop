@@ -15,9 +15,10 @@ import com.jtx.desktop.domain.model.DescriptionFormat
 fun MarkdownText(
     text: String,
     format: DescriptionFormat,
+    previewEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    if (format != DescriptionFormat.MARKDOWN) {
+    if (format != DescriptionFormat.MARKDOWN || !previewEnabled) {
         Text(text, style = MaterialTheme.typography.bodyMedium, modifier = modifier)
         return
     }
