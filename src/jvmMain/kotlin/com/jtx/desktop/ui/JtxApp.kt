@@ -257,7 +257,7 @@ fun JtxApp(
                                                 EntryType.JOURNAL -> scope.launch {
                                                     journalRepository.insert(JournalEntry(
                                                         action.entry.id, action.entry.id, action.entry.title,
-                                                        action.entry.description, action.entry.date, null,
+                                                        action.entry.description, DescriptionFormat.PLAIN, action.entry.date, null,
                                                         action.entry.categories, System.currentTimeMillis(),
                                                         System.currentTimeMillis(), action.entry.color, null, null, false
                                                     ))
@@ -265,7 +265,7 @@ fun JtxApp(
                                                 EntryType.NOTE -> scope.launch {
                                                     noteRepository.insert(NoteEntry(
                                                         action.entry.id, action.entry.id, action.entry.title,
-                                                        action.entry.description, action.entry.categories,
+                                                        action.entry.description, DescriptionFormat.PLAIN, action.entry.categories,
                                                         System.currentTimeMillis(), System.currentTimeMillis(),
                                                         action.entry.color, null, false
                                                     ))

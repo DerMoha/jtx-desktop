@@ -8,6 +8,7 @@ data class JournalEntry(
     val uid: String,
     val title: String,
     val description: String,
+    val descriptionFormat: DescriptionFormat = DescriptionFormat.PLAIN,
     val dtstart: Long?,
     val dtend: Long?,
     val categories: List<String>,
@@ -25,6 +26,7 @@ data class NoteEntry(
     val uid: String,
     val title: String,
     val description: String,
+    val descriptionFormat: DescriptionFormat = DescriptionFormat.PLAIN,
     val categories: List<String>,
     val created: Long,
     val updated: Long,
@@ -51,8 +53,26 @@ data class TaskEntry(
     val subtasks: List<Subtask>,
     val relatedEntries: List<String>,
     val recurrenceRule: RecurrenceRule? = null,
-    val archived: Boolean = false
+    val archived: Boolean = false,
+    val reminders: List<Reminder> = emptyList(),
+    val priority: Priority = Priority.NONE,
+    val timezone: String? = null
 )
+
+@Serializable
+data class Reminder(
+    val minutesBefore: Int,
+    val soundEnabled: Boolean = true
+)
+
+@Serializable
+enum class Priority {
+    NONE, LOW, MEDIUM, HIGH, URGENT
+}
+
+enum class DescriptionFormat {
+    PLAIN, MARKDOWN
+}
 
 @Serializable
 data class Subtask(
