@@ -45,6 +45,7 @@ kotlin {
                 implementation(compose.desktop.common)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
                 implementation("com.google.code.gson:gson:2.11.0")
+                implementation("org.mnode.ical4j:ical4j:4.1.1")
                 implementation("org.xerial:sqlite-jdbc:3.45.1.0")
             }
         }
