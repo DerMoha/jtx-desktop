@@ -61,6 +61,7 @@ data class TaskEntry(
     val uid: String,
     val title: String,
     val description: String,
+    val descriptionFormat: DescriptionFormat = DescriptionFormat.PLAIN,
     val due: Long?,
     val start: Long?,
     val completed: Boolean,
@@ -174,7 +175,12 @@ data class CombinedEntry(
     val location: String? = null,
     val comments: List<EntryComment> = emptyList(),
     val attachments: List<EntryAttachment> = emptyList(),
-    val relatedEntries: List<String> = emptyList()
+    val relatedEntries: List<String> = emptyList(),
+    val startDate: Long? = null,
+    val priority: Priority = Priority.NONE,
+    val recurrenceRule: RecurrenceRule? = null,
+    val reminders: List<Reminder> = emptyList(),
+    val subtasks: List<Subtask> = emptyList()
 )
 
 enum class SyncStatus {

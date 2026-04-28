@@ -3,6 +3,8 @@ package com.jtx.desktop.ui.screens.tasks
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -12,10 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jtx.desktop.data.repository.TaskRepository
-import com.jtx.desktop.domain.model.CombinedEntry
-import com.jtx.desktop.domain.model.EntryType
-import com.jtx.desktop.domain.model.RecurrenceFrequency
-import com.jtx.desktop.domain.model.RecurrenceRule
+import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
 import com.jtx.desktop.ui.components.EntryCard
 import com.jtx.desktop.ui.components.SearchBar
@@ -411,16 +410,34 @@ fun TaskEditDialog(
 ) {
     var title by remember { mutableStateOf(entry.title) }
     var description by remember { mutableStateOf(entry.description) }
+    var dueDate by remember { mutableStateOf(entry.date?.toString().orEmpty()) }
+    var startDate by remember { mutableStateOf(entry.startDate?.toString().orEmpty()) }
+    var completed by remember { mutableStateOf(entry.completed == true) }
     var progress by remember { mutableIntStateOf(entry.progress ?: 0) }
-    var showRecurrence by remember { mutableStateOf(false) }
-    var recurrenceFrequency by remember { mutableStateOf(RecurrenceFrequency.WEEKLY) }
-    var recurrenceInterval by remember { mutableIntStateOf(1) }
+    var descriptionFormat by remember { mutableStateOf(entry.descriptionFormat) }
+    var priority by remember { mutableStateOf(entry.priority) }
+    var showRecurrence by remember { mutableStateOf(entry.recurrenceRule != null) }
+    var recurrenceFrequency by remember { mutableStateOf(entry.recurrenceRule?.frequency ?: RecurrenceFrequency.WEEKLY) }
+    var recurrenceInterval by remember { mutableIntStateOf(entry.recurrenceRule?.interval ?: 1) }
+    var categories by remember { mutableStateOf(entry.categories.joinToString(", ")) }
+    var color by remember { mutableStateOf(entry.color.orEmpty()) }
+    var location by remember { mutableStateOf(entry.location.orEmpty()) }
+    var reminders by remember { mutableStateOf(entry.reminders.joinToString(", ") { it.minutesBefore.toString() }) }
+    var comments by remember { mutableStateOf(entry.comments.joinToString("\n") { it.text }) }
+    var subtasks by remember { mutableStateOf(entry.subtasks.joinToString("\n") { subtask -> "${if (subtask.completed) "[x]" else "[ ]"} ${subtask.title}" }) }
+    var attachments by remember { mutableStateOf(entry.attachments.joinToString(", ") { it.uri }) }
+    var relatedEntries by remember { mutableStateOf(entry.relatedEntries.joinToString(", ")) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit Task") },
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -438,6 +455,38 @@ fun TaskEditDialog(
                     maxLines = 5
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = descriptionFormat == DescriptionFormat.PLAIN,
+                        onClick = { descriptionFormat = DescriptionFormat.PLAIN },
+                        label = { Text("Plain") }
+                    )
+                    FilterChip(
+                        selected = descriptionFormat == DescriptionFormat.MARKDOWN,
+                        onClick = { descriptionFormat = DescriptionFormat.MARKDOWN },
+                        label = { Text("Markdown") }
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = startDate,
+                    onValueChange = { startDate = it.filter(Char::isDigit) },
+                    label = { Text("Start timestamp") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = dueDate,
+                    onValueChange = { dueDate = it.filter(Char::isDigit) },
+                    label = { Text("Due timestamp") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = completed, onCheckedChange = { completed = it })
+                    Text("Completed")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Progress: $progress%")
                     Spacer(modifier = Modifier.width(8.dp))
@@ -447,6 +496,17 @@ fun TaskEditDialog(
                         valueRange = 0f..100f,
                         modifier = Modifier.weight(1f)
                     )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Priority", style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Priority.entries.forEach { item ->
+                        FilterChip(
+                            selected = priority == item,
+                            onClick = { priority = item },
+                            label = { Text(item.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 TextButton(onClick = { showRecurrence = !showRecurrence }) {
@@ -492,11 +552,89 @@ fun TaskEditDialog(
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = reminders,
+                    onValueChange = { reminders = it },
+                    label = { Text("Reminder minutes before") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = categories,
+                    onValueChange = { categories = it },
+                    label = { Text("Categories") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = color,
+                    onValueChange = { color = it },
+                    label = { Text("Color") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = { Text("Location") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = subtasks,
+                    onValueChange = { subtasks = it },
+                    label = { Text("Subtasks ([x] Done)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = comments,
+                    onValueChange = { comments = it },
+                    label = { Text("Comments (one per line)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = attachments,
+                    onValueChange = { attachments = it },
+                    label = { Text("Attachment URIs") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = relatedEntries,
+                    onValueChange = { relatedEntries = it },
+                    label = { Text("Related entry IDs") },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                onSave(entry.copy(title = title, description = description, progress = progress))
+                onSave(
+                    entry.copy(
+                        title = title,
+                        description = description,
+                        descriptionFormat = descriptionFormat,
+                        date = dueDate.toLongOrNull(),
+                        startDate = startDate.toLongOrNull(),
+                        completed = completed,
+                        progress = progress,
+                        priority = priority,
+                        recurrenceRule = if (showRecurrence) RecurrenceRule(recurrenceFrequency, recurrenceInterval.coerceAtLeast(1)) else null,
+                        reminders = reminders.toCsvList().mapNotNull { it.toIntOrNull() }.map { Reminder(it) },
+                        categories = categories.toCsvList(),
+                        color = color.ifBlank { null },
+                        location = location.ifBlank { null },
+                        subtasks = subtasks.toSubtasks(entry.subtasks),
+                        comments = comments.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { EntryComment(it) },
+                        attachments = attachments.toCsvList().map { EntryAttachment(uri = it) },
+                        relatedEntries = relatedEntries.toCsvList()
+                    )
+                )
             }) {
                 Text("Save")
             }
@@ -508,6 +646,21 @@ fun TaskEditDialog(
         }
     )
 }
+
+private fun String.toCsvList(): List<String> = split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+private fun String.toSubtasks(existing: List<Subtask>): List<Subtask> = lines()
+    .map { it.trim() }
+    .filter { it.isNotEmpty() }
+    .mapIndexed { index, line ->
+        val completed = line.startsWith("[x]", ignoreCase = true)
+        val title = line.removePrefix("[x]").removePrefix("[X]").removePrefix("[ ]").trim()
+        Subtask(
+            id = existing.getOrNull(index)?.id ?: UUID.randomUUID().toString(),
+            title = title,
+            completed = completed
+        )
+    }
 
 private fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault())

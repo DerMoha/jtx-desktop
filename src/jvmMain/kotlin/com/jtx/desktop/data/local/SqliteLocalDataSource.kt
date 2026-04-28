@@ -156,6 +156,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 uid TEXT NOT NULL,
                 title TEXT NOT NULL,
                 description TEXT NOT NULL,
+                description_format TEXT NOT NULL DEFAULT 'PLAIN',
                 due INTEGER,
                 due_timezone TEXT,
                 start INTEGER,
@@ -316,6 +317,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         addColumnIfMissing(stmt, "tasks", "recurrence_timezone", "TEXT")
         addColumnIfMissing(stmt, "tasks", "recurrence_id_timezone", "TEXT")
         addColumnIfMissing(stmt, "tasks", "priority", "TEXT NOT NULL DEFAULT 'NONE'")
+        addColumnIfMissing(stmt, "tasks", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
         addColumnIfMissing(stmt, "tasks", "timezone", "TEXT")
         addColumnIfMissing(stmt, "tasks", "sequence", "INTEGER NOT NULL DEFAULT 0")
         addColumnIfMissing(stmt, "tasks", "url", "TEXT")
@@ -465,6 +467,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             uid = rs.getString("uid"),
             title = rs.getString("title"),
             description = rs.getString("description"),
+            descriptionFormat = DescriptionFormat.valueOf(rs.getString("description_format")),
             due = rs.getObject("due") as? Long,
             dueTimezone = rs.getString("due_timezone"),
             start = rs.getObject("start") as? Long,
@@ -805,41 +808,42 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO tasks
-                   (id, uid, title, description, due, due_timezone, start, start_timezone, completed, completed_timezone, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, recurrence_dates, exception_dates, recurrence_id, recurrence_timezone, recurrence_id_timezone, priority, timezone, sequence, url, contact, geo, classification, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, description_format, due, due_timezone, start, start_timezone, completed, completed_timezone, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, recurrence_dates, exception_dates, recurrence_id, recurrence_timezone, recurrence_id_timezone, priority, timezone, sequence, url, contact, geo, classification, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
                 ps.setString(3, entry.title)
                 ps.setString(4, entry.description)
-                ps.setObject(5, entry.due)
-                ps.setString(6, entry.dueTimezone)
-                ps.setObject(7, entry.start)
-                ps.setString(8, entry.startTimezone)
-                ps.setInt(9, if (entry.completed) 1 else 0)
-                ps.setString(10, entry.completedTimezone)
-                ps.setInt(11, entry.progress)
-                ps.setString(12, Json.encodeToString(entry.categories))
-                ps.setLong(13, entry.created)
-                ps.setLong(14, entry.updated)
-                ps.setString(15, entry.color)
-                ps.setString(16, entry.location)
-                ps.setString(17, Json.encodeToString(entry.subtasks))
-                ps.setString(18, Json.encodeToString(entry.relatedEntries))
-                ps.setString(19, entry.recurrenceRule?.let { Json.encodeToString(it) })
-                ps.setString(20, Json.encodeToString(entry.recurrenceDates))
-                ps.setString(21, Json.encodeToString(entry.exceptionDates))
-                ps.setObject(22, entry.recurrenceId)
-                ps.setString(23, entry.recurrenceTimezone)
-                ps.setString(24, entry.recurrenceIdTimezone)
-                ps.setString(25, entry.priority.name)
-                ps.setString(26, entry.timezone)
-                ps.setInt(27, entry.sequence)
-                ps.setString(28, entry.url)
-                ps.setString(29, entry.contact)
-                ps.setString(30, entry.geo)
-                ps.setString(31, entry.classification)
-                ps.setInt(32, if (entry.archived) 1 else 0)
+                ps.setString(5, entry.descriptionFormat.name)
+                ps.setObject(6, entry.due)
+                ps.setString(7, entry.dueTimezone)
+                ps.setObject(8, entry.start)
+                ps.setString(9, entry.startTimezone)
+                ps.setInt(10, if (entry.completed) 1 else 0)
+                ps.setString(11, entry.completedTimezone)
+                ps.setInt(12, entry.progress)
+                ps.setString(13, Json.encodeToString(entry.categories))
+                ps.setLong(14, entry.created)
+                ps.setLong(15, entry.updated)
+                ps.setString(16, entry.color)
+                ps.setString(17, entry.location)
+                ps.setString(18, Json.encodeToString(entry.subtasks))
+                ps.setString(19, Json.encodeToString(entry.relatedEntries))
+                ps.setString(20, entry.recurrenceRule?.let { Json.encodeToString(it) })
+                ps.setString(21, Json.encodeToString(entry.recurrenceDates))
+                ps.setString(22, Json.encodeToString(entry.exceptionDates))
+                ps.setObject(23, entry.recurrenceId)
+                ps.setString(24, entry.recurrenceTimezone)
+                ps.setString(25, entry.recurrenceIdTimezone)
+                ps.setString(26, entry.priority.name)
+                ps.setString(27, entry.timezone)
+                ps.setInt(28, entry.sequence)
+                ps.setString(29, entry.url)
+                ps.setString(30, entry.contact)
+                ps.setString(31, entry.geo)
+                ps.setString(32, entry.classification)
+                ps.setInt(33, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
