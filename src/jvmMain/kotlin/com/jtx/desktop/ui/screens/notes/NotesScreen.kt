@@ -322,6 +322,7 @@ fun NoteEditDialog(
                     value = color,
                     onValueChange = { color = it },
                     label = { Text("Color") },
+                    supportingText = { Text("CSS color, e.g. #3F51B5 or red. Blank clears.") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -363,7 +364,7 @@ fun NoteEditDialog(
                         description = description,
                         descriptionFormat = descriptionFormat,
                         categories = categories.toTokenList(),
-                        color = color.ifBlank { null },
+                        color = color.toCssColorOrNull(),
                         location = location.ifBlank { null },
                         comments = comments.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { EntryComment(it) },
                         attachments = attachments.toCsvList().map { EntryAttachment(uri = it) },
@@ -385,3 +386,14 @@ fun NoteEditDialog(
 private fun String.toCsvList(): List<String> = split(',').map { it.trim() }.filter { it.isNotEmpty() }
 
 private fun String.toTokenList(): List<String> = split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
+
+private fun String.toCssColorOrNull(): String? {
+    val value = trim()
+    if (value.isEmpty()) return null
+    val hex = value.removePrefix("#")
+    return when {
+        Regex("[0-9a-fA-F]{3}").matches(hex) -> "#${hex.map { "$it$it" }.joinToString("").uppercase()}"
+        Regex("[0-9a-fA-F]{6}").matches(hex) -> "#${hex.uppercase()}"
+        else -> value
+    }
+}
