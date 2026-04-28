@@ -34,6 +34,7 @@ import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.data.repository.TemplateRepository
 import com.jtx.desktop.domain.model.*
 import java.awt.event.KeyEvent as AWTKeyEvent
+import java.util.UUID
 import kotlinx.coroutines.launch
 
 enum class Tab(val title: String, val icon: ImageVector) {
@@ -104,6 +105,83 @@ fun JtxApp(
     val scope = rememberCoroutineScope()
 
     var settings by remember { mutableStateOf<AppSettings?>(null) }
+
+    fun createNewEntry(type: EntryType, title: String, description: String) {
+        val now = System.currentTimeMillis()
+        val id = UUID.randomUUID().toString()
+        val combinedEntry = CombinedEntry(
+            id = id,
+            type = type,
+            title = title,
+            description = description,
+            date = if (type == EntryType.JOURNAL) now else null,
+            categories = emptyList(),
+            color = null,
+            progress = if (type == EntryType.TASK) 0 else null,
+            completed = if (type == EntryType.TASK) false else null
+        )
+
+        scope.launch {
+            when (type) {
+                EntryType.JOURNAL -> journalRepository.insert(
+                    JournalEntry(
+                        id = id,
+                        uid = id,
+                        title = title,
+                        description = description,
+                        descriptionFormat = DescriptionFormat.PLAIN,
+                        dtstart = now,
+                        dtend = null,
+                        categories = emptyList(),
+                        created = now,
+                        updated = now,
+                        color = null,
+                        location = null,
+                        comment = null
+                    )
+                )
+                EntryType.NOTE -> noteRepository.insert(
+                    NoteEntry(
+                        id = id,
+                        uid = id,
+                        title = title,
+                        description = description,
+                        descriptionFormat = DescriptionFormat.PLAIN,
+                        categories = emptyList(),
+                        created = now,
+                        updated = now,
+                        color = null
+                    )
+                )
+                EntryType.TASK -> taskRepository.insert(
+                    TaskEntry(
+                        id = id,
+                        uid = id,
+                        title = title,
+                        description = description,
+                        due = null,
+                        start = null,
+                        completed = false,
+                        progress = 0,
+                        categories = emptyList(),
+                        created = now,
+                        updated = now,
+                        color = null,
+                        location = null,
+                        subtasks = emptyList(),
+                        relatedEntries = emptyList()
+                    )
+                )
+            }
+            undoManager.push(UndoAction(UndoType.CREATE, combinedEntry))
+            selectedTab = when (type) {
+                EntryType.JOURNAL -> Tab.Journals
+                EntryType.NOTE -> Tab.Notes
+                EntryType.TASK -> Tab.Tasks
+            }
+            snackbarMessage = "Created ${type.name.lowercase()}"
+        }
+    }
 
     fun handleKeyboardShortcut(event: KeyEvent): Boolean {
         val awtEvent = event.nativeKeyEvent
@@ -408,24 +486,14 @@ fun JtxApp(
         }
 
         if (showNewDialog) {
-            var selectedType by remember { mutableStateOf<EntryType?>(null) }
             NewEntryDialog(
                 onDismiss = { showNewDialog = false },
-                onCreate = { type ->
-                    selectedType = type
+                onCreate = { type, title, description ->
+                    createNewEntry(type, title, description)
                     showNewDialog = false
                 },
                 templates = templateRepository.getTemplates()
             )
-            selectedType?.let { type ->
-                LaunchedEffect(type) {
-                    when (type) {
-                        EntryType.JOURNAL -> {}
-                        EntryType.NOTE -> {}
-                        EntryType.TASK -> {}
-                    }
-                }
-            }
         }
     }
 }
@@ -433,9 +501,13 @@ fun JtxApp(
 @Composable
 fun NewEntryDialog(
     onDismiss: () -> Unit,
-    onCreate: (EntryType) -> Unit,
+    onCreate: (EntryType, String, String) -> Unit,
     templates: List<EntryTemplate> = emptyList()
 ) {
+    var selectedType by remember { mutableStateOf<EntryType?>(null) }
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Create New") },
@@ -447,11 +519,40 @@ fun NewEntryDialog(
                     EntryType.TASK to "Task"
                 ).forEach { (type, label) ->
                     TextButton(
-                        onClick = { onCreate(type) },
+                        onClick = { selectedType = type },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(label)
+                        Text(
+                            text = label,
+                            color = if (selectedType == type) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                        )
                     }
+                }
+                selectedType?.let { type ->
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Title") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        maxLines = 5
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Creating a ${type.name.lowercase()}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 if (templates.isNotEmpty()) {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -459,7 +560,7 @@ fun NewEntryDialog(
                     templates.forEach { template ->
                         TextButton(
                             onClick = {
-                                onCreate(template.type)
+                                selectedType = template.type
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -469,7 +570,14 @@ fun NewEntryDialog(
                 }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            TextButton(
+                enabled = selectedType != null,
+                onClick = { selectedType?.let { onCreate(it, title, description) } }
+            ) {
+                Text("Create")
+            }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
