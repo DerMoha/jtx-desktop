@@ -1,5 +1,6 @@
 package com.jtx.desktop.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +18,7 @@ import com.jtx.desktop.domain.model.CombinedEntry
 @Composable
 fun RelatedEntriesSection(
     relatedEntries: List<CombinedEntry>,
+    onEntryClick: (CombinedEntry) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (relatedEntries.isEmpty()) return
@@ -32,6 +34,7 @@ fun RelatedEntriesSection(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable { onEntryClick(entry) }
                     .padding(vertical = 2.dp)
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {

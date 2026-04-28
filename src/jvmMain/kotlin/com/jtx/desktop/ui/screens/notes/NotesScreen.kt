@@ -28,13 +28,16 @@ import java.awt.Frame
 fun NotesScreen(
     repository: NoteRepository,
     allEntries: List<CombinedEntry> = emptyList(),
+    openEntryRequest: CombinedEntry? = null,
+    onOpenEntryRequestHandled: () -> Unit = {},
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
     searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
     onDelete: (CombinedEntry) -> Unit = {},
-    onUpdate: (CombinedEntry, CombinedEntry) -> Unit = { _, _ -> }
+    onUpdate: (CombinedEntry, CombinedEntry) -> Unit = { _, _ -> },
+    onOpenRelatedEntry: (CombinedEntry) -> Unit = {}
 ) {
     var notes by remember { mutableStateOf(listOf<CombinedEntry>()) }
     LaunchedEffect(showArchived) {
@@ -44,6 +47,14 @@ fun NotesScreen(
     var isEditing by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showSortMenu by remember { mutableStateOf(false) }
+
+    LaunchedEffect(openEntryRequest) {
+        if (openEntryRequest?.type == EntryType.NOTE) {
+            selectedNote = openEntryRequest
+            isEditing = false
+            onOpenEntryRequestHandled()
+        }
+    }
 
     val filteredNotes = remember(notes, searchQuery, sortOrder, showArchived) {
         val base = if (showArchived) notes.filter { it.archived } else notes.filter { !it.archived }
@@ -157,6 +168,14 @@ fun NotesScreen(
         NoteDetailDialog(
             entry = selectedNote!!,
             relatedEntries = relatedEntriesFor(selectedNote!!, allEntries),
+            onRelatedEntryClick = { relatedEntry ->
+                if (relatedEntry.type == EntryType.NOTE) {
+                    selectedNote = relatedEntry
+                    isEditing = false
+                } else {
+                    onOpenRelatedEntry(relatedEntry)
+                }
+            },
             onDismiss = { selectedNote = null },
             onEdit = { isEditing = true },
             onDelete = {
@@ -201,6 +220,7 @@ fun NotesScreen(
 fun NoteDetailDialog(
     entry: CombinedEntry,
     relatedEntries: List<CombinedEntry> = emptyList(),
+    onRelatedEntryClick: (CombinedEntry) -> Unit = {},
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -227,7 +247,7 @@ fun NoteDetailDialog(
                 }
                 if (relatedEntries.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    RelatedEntriesSection(relatedEntries)
+                    RelatedEntriesSection(relatedEntries, onEntryClick = onRelatedEntryClick)
                 }
                 if (entry.archived) {
                     Spacer(modifier = Modifier.height(8.dp))

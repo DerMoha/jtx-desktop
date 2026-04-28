@@ -34,13 +34,16 @@ import java.util.*
 fun JournalsScreen(
     repository: JournalRepository,
     allEntries: List<CombinedEntry> = emptyList(),
+    openEntryRequest: CombinedEntry? = null,
+    onOpenEntryRequestHandled: () -> Unit = {},
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
     searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
     onDelete: (CombinedEntry) -> Unit = {},
-    onUpdate: (CombinedEntry, CombinedEntry) -> Unit = { _, _ -> }
+    onUpdate: (CombinedEntry, CombinedEntry) -> Unit = { _, _ -> },
+    onOpenRelatedEntry: (CombinedEntry) -> Unit = {}
 ) {
     var journals by remember { mutableStateOf(listOf<CombinedEntry>()) }
     LaunchedEffect(showArchived) {
@@ -50,6 +53,14 @@ fun JournalsScreen(
     var isEditing by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showSortMenu by remember { mutableStateOf(false) }
+
+    LaunchedEffect(openEntryRequest) {
+        if (openEntryRequest?.type == EntryType.JOURNAL) {
+            selectedEntry = openEntryRequest
+            isEditing = false
+            onOpenEntryRequestHandled()
+        }
+    }
 
     val filteredJournals = remember(journals, searchQuery, sortOrder, showArchived) {
         val base = if (showArchived) journals.filter { it.archived } else journals.filter { !it.archived }
@@ -163,6 +174,14 @@ fun JournalsScreen(
         JournalDetailDialog(
             entry = selectedEntry!!,
             relatedEntries = relatedEntriesFor(selectedEntry!!, allEntries),
+            onRelatedEntryClick = { relatedEntry ->
+                if (relatedEntry.type == EntryType.JOURNAL) {
+                    selectedEntry = relatedEntry
+                    isEditing = false
+                } else {
+                    onOpenRelatedEntry(relatedEntry)
+                }
+            },
             onDismiss = { selectedEntry = null },
             onEdit = { isEditing = true },
             onDelete = {
@@ -207,6 +226,7 @@ fun JournalsScreen(
 fun JournalDetailDialog(
     entry: CombinedEntry,
     relatedEntries: List<CombinedEntry> = emptyList(),
+    onRelatedEntryClick: (CombinedEntry) -> Unit = {},
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -240,7 +260,7 @@ fun JournalDetailDialog(
                 }
                 if (relatedEntries.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    RelatedEntriesSection(relatedEntries)
+                    RelatedEntriesSection(relatedEntries, onEntryClick = onRelatedEntryClick)
                 }
                 if (entry.archived) {
                     Spacer(modifier = Modifier.height(8.dp))

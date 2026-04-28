@@ -62,6 +62,12 @@ enum class SortOrder {
     DATE_DESC, DATE_ASC, TITLE_ASC, TITLE_DESC, MODIFIED_DESC, MODIFIED_ASC
 }
 
+private fun EntryType.toTab(): Tab = when (this) {
+    EntryType.JOURNAL -> Tab.Journals
+    EntryType.NOTE -> Tab.Notes
+    EntryType.TASK -> Tab.Tasks
+}
+
 enum class AppMenuAction {
     NEW_ENTRY,
     SYNC,
@@ -139,6 +145,7 @@ fun JtxApp(
     var showAboutDialog by remember { mutableStateOf(false) }
     var syncConflicts by remember { mutableStateOf<List<SyncRepository.SyncConflictInfo>>(emptyList()) }
     var allEntries by remember { mutableStateOf<List<CombinedEntry>>(emptyList()) }
+    var entryToOpen by remember { mutableStateOf<CombinedEntry?>(null) }
     val rootFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
@@ -721,35 +728,53 @@ fun JtxApp(
                     Tab.Journals -> JournalsScreen(
                         repository = journalRepository,
                         allEntries = allEntries,
+                        openEntryRequest = entryToOpen,
+                        onOpenEntryRequestHandled = { entryToOpen = null },
                         sortOrder = sortOrder,
                         showArchived = showArchived,
                         searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
                         onDelete = { entry -> undoManager.push(UndoAction(UndoType.DELETE, entry)) },
-                        onUpdate = { entry, prev -> undoManager.push(UndoAction(UndoType.UPDATE, entry, prev)) }
+                        onUpdate = { entry, prev -> undoManager.push(UndoAction(UndoType.UPDATE, entry, prev)) },
+                        onOpenRelatedEntry = { entry ->
+                            selectedTab = entry.type.toTab()
+                            entryToOpen = entry
+                        }
                     )
                     Tab.Notes -> NotesScreen(
                         repository = noteRepository,
                         allEntries = allEntries,
+                        openEntryRequest = entryToOpen,
+                        onOpenEntryRequestHandled = { entryToOpen = null },
                         sortOrder = sortOrder,
                         showArchived = showArchived,
                         searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
                         onDelete = { entry -> undoManager.push(UndoAction(UndoType.DELETE, entry)) },
-                        onUpdate = { entry, prev -> undoManager.push(UndoAction(UndoType.UPDATE, entry, prev)) }
+                        onUpdate = { entry, prev -> undoManager.push(UndoAction(UndoType.UPDATE, entry, prev)) },
+                        onOpenRelatedEntry = { entry ->
+                            selectedTab = entry.type.toTab()
+                            entryToOpen = entry
+                        }
                     )
                     Tab.Tasks -> TasksScreen(
                         repository = taskRepository,
                         allEntries = allEntries,
+                        openEntryRequest = entryToOpen,
+                        onOpenEntryRequestHandled = { entryToOpen = null },
                         sortOrder = sortOrder,
                         showArchived = showArchived,
                         searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
                         onDelete = { entry -> undoManager.push(UndoAction(UndoType.DELETE, entry)) },
-                        onUpdate = { entry, prev -> undoManager.push(UndoAction(UndoType.UPDATE, entry, prev)) }
+                        onUpdate = { entry, prev -> undoManager.push(UndoAction(UndoType.UPDATE, entry, prev)) },
+                        onOpenRelatedEntry = { entry ->
+                            selectedTab = entry.type.toTab()
+                            entryToOpen = entry
+                        }
                     )
                     Tab.Kanban -> KanbanScreen(
                         repository = taskRepository,

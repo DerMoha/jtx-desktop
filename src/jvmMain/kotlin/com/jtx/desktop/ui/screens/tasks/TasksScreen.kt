@@ -38,13 +38,16 @@ enum class TaskFilter {
 fun TasksScreen(
     repository: TaskRepository,
     allEntries: List<CombinedEntry> = emptyList(),
+    openEntryRequest: CombinedEntry? = null,
+    onOpenEntryRequestHandled: () -> Unit = {},
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
     searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
     onDelete: (CombinedEntry) -> Unit = {},
-    onUpdate: (CombinedEntry, CombinedEntry) -> Unit = { _, _ -> }
+    onUpdate: (CombinedEntry, CombinedEntry) -> Unit = { _, _ -> },
+    onOpenRelatedEntry: (CombinedEntry) -> Unit = {}
 ) {
     var tasks by remember { mutableStateOf(listOf<CombinedEntry>()) }
     LaunchedEffect(showArchived) {
@@ -57,6 +60,14 @@ fun TasksScreen(
     var taskFilter by remember { mutableStateOf(TaskFilter.ALL) }
     var selectedTasks by remember { mutableStateOf(setOf<String>()) }
     var isMultiSelectMode by remember { mutableStateOf(false) }
+
+    LaunchedEffect(openEntryRequest) {
+        if (openEntryRequest?.type == EntryType.TASK) {
+            selectedTask = openEntryRequest
+            isEditing = false
+            onOpenEntryRequestHandled()
+        }
+    }
 
     val filteredTasks = remember(tasks, searchQuery, sortOrder, showArchived, taskFilter) {
         var base = if (showArchived) tasks.filter { it.archived } else tasks.filter { !it.archived }
@@ -268,6 +279,14 @@ fun TasksScreen(
         TaskDetailDialog(
             entry = selectedTask!!,
             relatedEntries = relatedEntriesFor(selectedTask!!, allEntries),
+            onRelatedEntryClick = { relatedEntry ->
+                if (relatedEntry.type == EntryType.TASK) {
+                    selectedTask = relatedEntry
+                    isEditing = false
+                } else {
+                    onOpenRelatedEntry(relatedEntry)
+                }
+            },
             onDismiss = { selectedTask = null },
             onEdit = { isEditing = true },
             onDelete = {
@@ -318,6 +337,7 @@ fun TasksScreen(
 fun TaskDetailDialog(
     entry: CombinedEntry,
     relatedEntries: List<CombinedEntry> = emptyList(),
+    onRelatedEntryClick: (CombinedEntry) -> Unit = {},
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -364,7 +384,7 @@ fun TaskDetailDialog(
                 )
                 if (relatedEntries.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    RelatedEntriesSection(relatedEntries)
+                    RelatedEntriesSection(relatedEntries, onEntryClick = onRelatedEntryClick)
                 }
                 if (entry.archived) {
                     Spacer(modifier = Modifier.height(8.dp))
