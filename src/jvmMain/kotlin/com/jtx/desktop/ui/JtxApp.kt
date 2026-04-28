@@ -130,6 +130,7 @@ fun JtxApp(
     syncRepository: SyncRepository,
     trayManager: TrayManager? = null,
     focusSearch: Boolean = false,
+    initialImportFiles: List<File> = emptyList(),
     menuAction: AppMenuAction? = null,
     onMenuActionHandled: () -> Unit = {}
 ) {
@@ -503,26 +504,44 @@ fun JtxApp(
         }
     }
 
+    suspend fun importIcsFile(file: File): Int {
+        val content = withContext(Dispatchers.IO) { file.readText() }
+        val entry = parser.parseEntry(content)
+        return when (entry) {
+            is TaskEntry -> {
+                taskRepository.insert(entry)
+                1
+            }
+            is NoteEntry -> {
+                noteRepository.insert(entry)
+                1
+            }
+            is JournalEntry -> {
+                journalRepository.insert(entry)
+                1
+            }
+            else -> 0
+        }
+    }
+
     fun importEntries() {
         scope.launch {
             val file = chooseFile("Import Entry", FileDialog.LOAD, "*.ics") ?: return@launch
-            val content = withContext(Dispatchers.IO) { file.readText() }
-            val imported = when {
-                content.contains("BEGIN:VTODO") -> parser.parseVTodo(content)?.let {
-                    taskRepository.insert(it)
-                    1
-                } ?: 0
-                content.contains("BEGIN:VNOTE") -> parser.parseVNote(content)?.let {
-                    noteRepository.insert(it)
-                    1
-                } ?: 0
-                content.contains("BEGIN:VJOURNAL") -> parser.parseVJournal(content)?.let {
-                    journalRepository.insert(it)
-                    1
-                } ?: 0
-                else -> 0
-            }
+            val imported = importIcsFile(file)
             snackbarMessage = if (imported > 0) "Imported $imported entry" else "No supported entry found"
+        }
+    }
+
+    LaunchedEffect(initialImportFiles) {
+        if (initialImportFiles.isNotEmpty()) {
+            val imported = initialImportFiles.sumOf { file ->
+                runCatching { importIcsFile(file) }.getOrDefault(0)
+            }
+            snackbarMessage = if (imported > 0) {
+                "Imported $imported entr${if (imported == 1) "y" else "ies"} from opened file${if (initialImportFiles.size == 1) "" else "s"}"
+            } else {
+                "No supported entries found in opened file${if (initialImportFiles.size == 1) "" else "s"}"
+            }
         }
     }
 

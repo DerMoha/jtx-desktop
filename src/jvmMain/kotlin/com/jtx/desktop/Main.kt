@@ -19,19 +19,23 @@ import com.jtx.desktop.ui.desktop.createAppMenuBar
 import com.jtx.desktop.domain.model.AppSettings
 import kotlinx.coroutines.runBlocking
 import java.awt.Dimension
+import java.io.File
 import javax.swing.JFrame
 
 var windowRef: java.awt.Window? = null
 var trayManagerRef: TrayManager? = null
 var minimizeToTray = true
 
-fun main() = application {
+fun main(args: Array<String>) = application {
     val localDataSource = SqliteLocalDataSource("jtx_board.db")
     val calDavClient = CalDavClient()
     val parser = ICalendarParser()
     val syncRepository = SyncRepository(localDataSource, calDavClient, parser)
 
     val settings: AppSettings = runBlocking { syncRepository.getSettings() }
+    val initialImportFiles = args
+        .map(::File)
+        .filter { it.isFile && it.extension.equals("ics", ignoreCase = true) }
 
     val windowWidth = settings.windowWidth?.dp ?: 1200.dp
     val windowHeight = settings.windowHeight?.dp ?: 800.dp
@@ -117,6 +121,7 @@ fun main() = application {
         JtxApp(
             syncRepository = syncRepository,
             trayManager = tm,
+            initialImportFiles = initialImportFiles,
             menuAction = menuAction,
             onMenuActionHandled = { menuAction = null }
         )
