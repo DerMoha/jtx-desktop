@@ -36,6 +36,7 @@ class JournalRepository(private val local: LocalDataSource) {
     suspend fun getById(id: String): JournalEntry? = local.getJournalById(id)
     suspend fun insert(entry: JournalEntry) {
         local.insertJournal(entry)
+        local.upsertObjectSyncMetadata(entry.createDirtyMetadata(EntryType.JOURNAL))
         onDataChange?.invoke()
     }
     suspend fun update(entry: JournalEntry) {
@@ -96,6 +97,7 @@ class NoteRepository(private val local: LocalDataSource) {
     suspend fun getById(id: String): NoteEntry? = local.getNoteById(id)
     suspend fun insert(entry: NoteEntry) {
         local.insertNote(entry)
+        local.upsertObjectSyncMetadata(entry.createDirtyMetadata(EntryType.NOTE))
         onDataChange?.invoke()
     }
     suspend fun update(entry: NoteEntry) {
@@ -156,6 +158,7 @@ class TaskRepository(private val local: LocalDataSource) {
     suspend fun getById(id: String): TaskEntry? = local.getTaskById(id)
     suspend fun insert(entry: TaskEntry) {
         local.insertTask(entry)
+        local.upsertObjectSyncMetadata(entry.createDirtyMetadata(EntryType.TASK))
         onDataChange?.invoke()
     }
     suspend fun update(entry: TaskEntry) {
@@ -203,6 +206,36 @@ class TaskRepository(private val local: LocalDataSource) {
     }
 }
 
+private fun JournalEntry.createDirtyMetadata(entryType: EntryType): ObjectSyncMetadata = ObjectSyncMetadata(
+    entryId = id,
+    entryType = entryType,
+    dirty = true,
+    deleted = false,
+    uid = uid,
+    sequence = sequence,
+    lastModified = updated
+)
+
+private fun NoteEntry.createDirtyMetadata(entryType: EntryType): ObjectSyncMetadata = ObjectSyncMetadata(
+    entryId = id,
+    entryType = entryType,
+    dirty = true,
+    deleted = false,
+    uid = uid,
+    sequence = sequence,
+    lastModified = updated
+)
+
+private fun TaskEntry.createDirtyMetadata(entryType: EntryType): ObjectSyncMetadata = ObjectSyncMetadata(
+    entryId = id,
+    entryType = entryType,
+    dirty = true,
+    deleted = false,
+    uid = uid,
+    sequence = sequence,
+    lastModified = updated
+)
+
 class SyncRepository(
     private val local: LocalDataSource,
     private val calDavClient: CalDavClient,
@@ -237,12 +270,13 @@ class SyncRepository(
         val settings = local.getSettings()
         val discoveredCollections = discoverCollections(credentials).getOrNull().orEmpty()
         val collectionMetadata = discoveredCollections.findCollection(collection) ?: local.getCollectionByUrl(collection)
+        val uploadResult = uploadLocalCreates(credentials, collection)
         val fetchResult = calDavClient.fetchEntries(credentials, collection)
         return fetchResult.fold(
             onSuccess = { hrefs ->
-                var successCount = 0
-                var failureCount = 0
-                val failures = mutableListOf<String>()
+                var successCount = uploadResult.successCount
+                var failureCount = uploadResult.failureCount
+                val failures = uploadResult.failures.toMutableList()
                 val conflicts = mutableListOf<SyncConflictInfo>()
 
                 val objectResult = calDavClient.fetchCalendarObjects(credentials, collection, hrefs)
@@ -333,6 +367,58 @@ class SyncRepository(
         return firstOrNull { collection ->
             collection.url.trimEnd('/') == normalizedUrl || collection.url.trim('/').endsWith(normalizedUrl.trim('/'))
         }
+    }
+
+    private data class LocalUploadResult(
+        val successCount: Int,
+        val failureCount: Int,
+        val failures: List<String>
+    )
+
+    private suspend fun uploadLocalCreates(credentials: CalDavCredentials, collection: String): LocalUploadResult {
+        var successCount = 0
+        var failureCount = 0
+        val failures = mutableListOf<String>()
+        val creates = local.getDirtyObjectSyncMetadata().filter { metadata ->
+            metadata.dirty && !metadata.deleted && metadata.href == null
+        }
+
+        creates.forEach { metadata ->
+            val entry = when (metadata.entryType) {
+                EntryType.JOURNAL -> local.getJournalById(metadata.entryId)
+                EntryType.NOTE -> local.getNoteById(metadata.entryId)
+                EntryType.TASK -> local.getTaskById(metadata.entryId)
+            }
+            if (entry == null) {
+                failureCount++
+                failures.add("Missing local ${metadata.entryType.name.lowercase()} ${metadata.entryId}")
+                return@forEach
+            }
+
+            val href = "${collection.trimEnd('/')}/${metadata.uid}.ics"
+            val result = calDavClient.putNewEntry(credentials, href, parser.entryToIcs(entry))
+            result.fold(
+                onSuccess = { etag ->
+                    local.upsertObjectSyncMetadata(
+                        metadata.copy(
+                            collectionUrl = collection,
+                            href = href,
+                            filename = href.substringAfterLast('/'),
+                            etag = etag,
+                            dirty = false,
+                            deleted = false
+                        )
+                    )
+                    successCount++
+                },
+                onFailure = { error ->
+                    failureCount++
+                    failures.add("Failed to upload ${metadata.entryType.name.lowercase()} ${metadata.entryId}: ${error.message}")
+                }
+            )
+        }
+
+        return LocalUploadResult(successCount, failureCount, failures)
     }
 
     private suspend fun storeRemoteMetadata(

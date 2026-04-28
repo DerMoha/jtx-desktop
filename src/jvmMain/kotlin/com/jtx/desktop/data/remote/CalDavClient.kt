@@ -181,6 +181,28 @@ class CalDavClient {
         }
     }
 
+    suspend fun putNewEntry(credentials: CalDavCredentials, href: String, icsContent: String): Result<String?> = withContext(Dispatchers.IO) {
+        retryWithBackoff(maxRetries) {
+            val url = resolveUrl(credentials, href)
+            val conn = url.openConnection() as HttpsURLConnection
+            conn.connectTimeout = connectTimeout
+            conn.readTimeout = readTimeout
+            conn.requestMethod = "PUT"
+            conn.setRequestProperty("Content-Type", "text/calendar; charset=utf-8")
+            conn.setRequestProperty("If-None-Match", "*")
+            setAuth(conn, credentials)
+            conn.doOutput = true
+            conn.outputStream.write(icsContent.toByteArray())
+
+            val responseCode = conn.responseCode
+            if (responseCode in 200..299) {
+                Result.success(conn.getHeaderField("ETag"))
+            } else {
+                Result.failure(Exception("HTTP $responseCode: ${conn.responseMessage}"))
+            }
+        }
+    }
+
     suspend fun deleteEntry(credentials: CalDavCredentials, href: String): Result<Unit> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
             val url = resolveUrl(credentials, href)
