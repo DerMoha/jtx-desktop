@@ -235,7 +235,8 @@ class SyncRepository(
 
     suspend fun sync(credentials: CalDavCredentials, collection: String): Result<SyncResult> {
         val settings = local.getSettings()
-        discoverCollections(credentials)
+        val discoveredCollections = discoverCollections(credentials).getOrNull().orEmpty()
+        val collectionMetadata = discoveredCollections.findCollection(collection) ?: local.getCollectionByUrl(collection)
         val fetchResult = calDavClient.fetchEntries(credentials, collection)
         return fetchResult.fold(
             onSuccess = { hrefs ->
@@ -310,11 +311,28 @@ class SyncRepository(
                         failures.add("Failed to fetch calendar objects: ${e.message}")
                     }
                 )
-                local.saveSettings(settings.copy(lastSyncTime = System.currentTimeMillis()))
+                val now = System.currentTimeMillis()
+                collectionMetadata?.let { metadata ->
+                    local.upsertCollection(metadata.copy(lastSync = now))
+                }
+                local.saveSettings(
+                    settings.copy(
+                        lastSyncTime = now,
+                        syncToken = collectionMetadata?.syncToken ?: settings.syncToken,
+                        serverCtag = collectionMetadata?.ctag ?: settings.serverCtag
+                    )
+                )
                 Result.success(SyncResult(successCount, failureCount, failures, conflicts))
             },
             onFailure = { Result.failure(it) }
         )
+    }
+
+    private fun List<CalDavCollection>.findCollection(collectionUrl: String): CalDavCollection? {
+        val normalizedUrl = collectionUrl.trimEnd('/')
+        return firstOrNull { collection ->
+            collection.url.trimEnd('/') == normalizedUrl || collection.url.trim('/').endsWith(normalizedUrl.trim('/'))
+        }
     }
 
     private suspend fun storeRemoteMetadata(
