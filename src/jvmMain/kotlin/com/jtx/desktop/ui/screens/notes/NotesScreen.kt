@@ -17,6 +17,7 @@ import com.jtx.desktop.data.local.AttachmentCache
 import com.jtx.desktop.data.repository.NoteRepository
 import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
+import com.jtx.desktop.ui.components.AttachmentsSection
 import com.jtx.desktop.ui.components.EntryCard
 import com.jtx.desktop.ui.components.MarkdownText
 import com.jtx.desktop.ui.components.RelatedEntriesSection
@@ -249,6 +250,10 @@ fun NoteDetailDialog(
                 if (relatedEntries.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     RelatedEntriesSection(relatedEntries, onEntryClick = onRelatedEntryClick)
+                }
+                if (entry.attachments.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    AttachmentsSection(entry.attachments)
                 }
                 if (entry.archived) {
                     Spacer(modifier = Modifier.height(8.dp))
