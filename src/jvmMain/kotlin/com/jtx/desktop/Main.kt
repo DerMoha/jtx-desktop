@@ -1,8 +1,9 @@
 package com.jtx.desktop
 
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.application
 import androidx.compose.ui.window.WindowState
+import androidx.compose.ui.window.application
 import com.jtx.desktop.data.local.SqliteLocalDataSource
 import com.jtx.desktop.data.remote.CalDavClient
 import com.jtx.desktop.data.remote.ICalendarParser
@@ -10,6 +11,8 @@ import com.jtx.desktop.data.repository.SyncRepository
 import com.jtx.desktop.ui.JtxApp
 import com.jtx.desktop.ui.desktop.TrayManager
 import com.jtx.desktop.ui.desktop.createAppMenuBar
+import com.jtx.desktop.domain.model.AppSettings
+import kotlinx.coroutines.runBlocking
 import java.awt.Dimension
 import javax.swing.JFrame
 
@@ -18,11 +21,19 @@ var trayManagerRef: TrayManager? = null
 var minimizeToTray = true
 
 fun main() = application {
-    val windowState = WindowState()
     val localDataSource = SqliteLocalDataSource("jtx_board.db")
     val calDavClient = CalDavClient()
     val parser = ICalendarParser()
     val syncRepository = SyncRepository(localDataSource, calDavClient, parser)
+
+    val settings: AppSettings = runBlocking { syncRepository.getSettings() }
+
+    val windowWidth = settings.windowWidth?.dp ?: 1200.dp
+    val windowHeight = settings.windowHeight?.dp ?: 800.dp
+
+    val windowState = WindowState(
+        size = androidx.compose.ui.unit.DpSize(windowWidth, windowHeight)
+    )
 
     Window(
         onCloseRequest = {
@@ -46,6 +57,16 @@ fun main() = application {
                 onImport = { },
                 onExport = { },
                 onQuit = {
+                    runBlocking {
+                        val ws = windowRef?.bounds
+                        val newSettings = settings.copy(
+                            windowX = ws?.x,
+                            windowY = ws?.y,
+                            windowWidth = ws?.width,
+                            windowHeight = ws?.height
+                        )
+                        syncRepository.saveSettings(newSettings)
+                    }
                     trayManagerRef?.dispose()
                     exitApplication()
                 },
@@ -65,6 +86,16 @@ fun main() = application {
                 windowRef?.isVisible = true
             },
             onQuitClick = {
+                runBlocking {
+                    val ws = windowRef?.bounds
+                    val newSettings = settings.copy(
+                        windowX = ws?.x,
+                        windowY = ws?.y,
+                        windowWidth = ws?.width,
+                        windowHeight = ws?.height
+                    )
+                    syncRepository.saveSettings(newSettings)
+                }
                 trayManagerRef?.dispose()
                 exitApplication()
             }

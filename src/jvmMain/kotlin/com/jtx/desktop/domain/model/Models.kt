@@ -105,7 +105,11 @@ data class AppSettings(
     val lastSyncTime: Long? = null,
     val sortPreference: SortPreference = SortPreference(SortField.DATE, false),
     val darkModePreference: DarkModePreference = DarkModePreference.SYSTEM,
-    val kanbanColumns: List<KanbanColumnConfig> = defaultKanbanColumns
+    val kanbanColumns: List<KanbanColumnConfig> = defaultKanbanColumns,
+    val windowX: Int? = null,
+    val windowY: Int? = null,
+    val windowWidth: Int? = null,
+    val windowHeight: Int? = null
 )
 
 @Serializable
