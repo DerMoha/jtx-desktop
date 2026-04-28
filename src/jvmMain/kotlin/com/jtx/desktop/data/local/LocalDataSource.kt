@@ -24,6 +24,11 @@ interface LocalDataSource {
     suspend fun deleteNote(id: String)
     suspend fun deleteTask(id: String)
 
+    suspend fun restoreFromArchive(type: EntryType, id: String)
+    suspend fun permanentlyDeleteJournal(id: String)
+    suspend fun permanentlyDeleteNote(id: String)
+    suspend fun permanentlyDeleteTask(id: String)
+
     suspend fun getSettings(): AppSettings
     suspend fun saveSettings(settings: AppSettings)
 }

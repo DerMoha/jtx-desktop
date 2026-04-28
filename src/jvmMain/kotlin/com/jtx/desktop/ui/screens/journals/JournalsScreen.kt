@@ -157,6 +157,18 @@ fun JournalsScreen(
                     repository.delete(selectedEntry!!.id)
                 }
                 selectedEntry = null
+            },
+            onRestore = {
+                kotlinx.coroutines.runBlocking {
+                    repository.restore(selectedEntry!!.id)
+                }
+                selectedEntry = null
+            },
+            onPermanentDelete = {
+                kotlinx.coroutines.runBlocking {
+                    repository.permanentlyDelete(selectedEntry!!.id)
+                }
+                selectedEntry = null
             }
         )
     }
@@ -182,7 +194,9 @@ fun JournalDetailDialog(
     entry: CombinedEntry,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onRestore: () -> Unit,
+    onPermanentDelete: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -226,8 +240,17 @@ fun JournalDetailDialog(
         },
         dismissButton = {
             Row {
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                if (entry.archived) {
+                    TextButton(onClick = onRestore) {
+                        Text("Restore")
+                    }
+                    TextButton(onClick = onPermanentDelete) {
+                        Text("Delete Forever")
+                    }
+                } else {
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete")
+                    }
                 }
                 TextButton(onClick = onDismiss) {
                     Text("Close")

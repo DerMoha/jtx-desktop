@@ -446,7 +446,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         }
     }
 
-    suspend fun permanentlyDeleteJournal(id: String) = withContext(Dispatchers.IO) {
+    override suspend fun permanentlyDeleteJournal(id: String) = withContext(Dispatchers.IO) {
         useConnection { conn ->
             conn.prepareStatement("DELETE FROM journals WHERE id = ?").use { ps ->
                 ps.setString(1, id)
@@ -456,7 +456,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         _journals.value = loadJournals(includeArchived = true)
     }
 
-    suspend fun permanentlyDeleteNote(id: String) = withContext(Dispatchers.IO) {
+    override suspend fun permanentlyDeleteNote(id: String) = withContext(Dispatchers.IO) {
         useConnection { conn ->
             conn.prepareStatement("DELETE FROM notes WHERE id = ?").use { ps ->
                 ps.setString(1, id)
@@ -466,7 +466,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         _notes.value = loadNotes(includeArchived = true)
     }
 
-    suspend fun permanentlyDeleteTask(id: String) = withContext(Dispatchers.IO) {
+    override suspend fun permanentlyDeleteTask(id: String) = withContext(Dispatchers.IO) {
         useConnection { conn ->
             conn.prepareStatement("DELETE FROM tasks WHERE id = ?").use { ps ->
                 ps.setString(1, id)
@@ -476,7 +476,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         _tasks.value = loadTasks(includeArchived = true)
     }
 
-    suspend fun restoreFromArchive(type: EntryType, id: String) = withContext(Dispatchers.IO) {
+    override suspend fun restoreFromArchive(type: EntryType, id: String) = withContext(Dispatchers.IO) {
         val table = when (type) {
             EntryType.JOURNAL -> "journals"
             EntryType.NOTE -> "notes"

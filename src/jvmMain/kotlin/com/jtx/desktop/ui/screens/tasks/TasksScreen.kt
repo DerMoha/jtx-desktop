@@ -265,6 +265,18 @@ fun TasksScreen(
                 }
                 selectedTask = null
             },
+            onRestore = {
+                kotlinx.coroutines.runBlocking {
+                    repository.restore(selectedTask!!.id)
+                }
+                selectedTask = null
+            },
+            onPermanentDelete = {
+                kotlinx.coroutines.runBlocking {
+                    repository.permanentlyDelete(selectedTask!!.id)
+                }
+                selectedTask = null
+            },
             onToggleComplete = { completed ->
                 kotlinx.coroutines.runBlocking {
                     repository.updateTaskCompleted(selectedTask!!.id, completed)
@@ -296,6 +308,8 @@ fun TaskDetailDialog(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onRestore: () -> Unit,
+    onPermanentDelete: () -> Unit,
     onToggleComplete: (Boolean) -> Unit,
     onToggleMultiSelect: () -> Unit
 ) {
@@ -366,8 +380,17 @@ fun TaskDetailDialog(
         },
         dismissButton = {
             Row {
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                if (entry.archived) {
+                    TextButton(onClick = onRestore) {
+                        Text("Restore")
+                    }
+                    TextButton(onClick = onPermanentDelete) {
+                        Text("Delete Forever")
+                    }
+                } else {
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete")
+                    }
                 }
                 TextButton(onClick = onDismiss) {
                     Text("Close")

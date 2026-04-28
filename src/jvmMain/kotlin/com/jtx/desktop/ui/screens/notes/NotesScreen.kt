@@ -155,6 +155,18 @@ fun NotesScreen(
                     repository.delete(selectedNote!!.id)
                 }
                 selectedNote = null
+            },
+            onRestore = {
+                kotlinx.coroutines.runBlocking {
+                    repository.restore(selectedNote!!.id)
+                }
+                selectedNote = null
+            },
+            onPermanentDelete = {
+                kotlinx.coroutines.runBlocking {
+                    repository.permanentlyDelete(selectedNote!!.id)
+                }
+                selectedNote = null
             }
         )
     }
@@ -180,7 +192,9 @@ fun NoteDetailDialog(
     entry: CombinedEntry,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onRestore: () -> Unit,
+    onPermanentDelete: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -217,8 +231,17 @@ fun NoteDetailDialog(
         },
         dismissButton = {
             Row {
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete")
+                if (entry.archived) {
+                    TextButton(onClick = onRestore) {
+                        Text("Restore")
+                    }
+                    TextButton(onClick = onPermanentDelete) {
+                        Text("Delete Forever")
+                    }
+                } else {
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete")
+                    }
                 }
                 TextButton(onClick = onDismiss) {
                     Text("Close")

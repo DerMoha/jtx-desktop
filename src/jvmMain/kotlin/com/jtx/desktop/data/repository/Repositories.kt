@@ -54,6 +54,14 @@ class JournalRepository(private val local: LocalDataSource) {
         local.deleteJournal(id)
         onDataChange?.invoke()
     }
+    suspend fun restore(id: String) {
+        local.restoreFromArchive(EntryType.JOURNAL, id)
+        onDataChange?.invoke()
+    }
+    suspend fun permanentlyDelete(id: String) {
+        local.permanentlyDeleteJournal(id)
+        onDataChange?.invoke()
+    }
 }
 
 class NoteRepository(private val local: LocalDataSource) {
@@ -101,6 +109,14 @@ class NoteRepository(private val local: LocalDataSource) {
     }
     suspend fun delete(id: String) {
         local.deleteNote(id)
+        onDataChange?.invoke()
+    }
+    suspend fun restore(id: String) {
+        local.restoreFromArchive(EntryType.NOTE, id)
+        onDataChange?.invoke()
+    }
+    suspend fun permanentlyDelete(id: String) {
+        local.permanentlyDeleteNote(id)
         onDataChange?.invoke()
     }
 }
@@ -165,6 +181,14 @@ class TaskRepository(private val local: LocalDataSource) {
     }
     suspend fun delete(id: String) {
         local.deleteTask(id)
+        onDataChange?.invoke()
+    }
+    suspend fun restore(id: String) {
+        local.restoreFromArchive(EntryType.TASK, id)
+        onDataChange?.invoke()
+    }
+    suspend fun permanentlyDelete(id: String) {
+        local.permanentlyDeleteTask(id)
         onDataChange?.invoke()
     }
 }
