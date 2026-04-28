@@ -40,6 +40,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                         uid TEXT NOT NULL,
                         title TEXT NOT NULL,
                         description TEXT NOT NULL,
+                        description_format TEXT NOT NULL DEFAULT 'PLAIN',
                         dtstart INTEGER,
                         dtend INTEGER,
                         categories TEXT NOT NULL,
@@ -59,6 +60,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                         uid TEXT NOT NULL,
                         title TEXT NOT NULL,
                         description TEXT NOT NULL,
+                        description_format TEXT NOT NULL DEFAULT 'PLAIN',
                         categories TEXT NOT NULL,
                         created INTEGER NOT NULL,
                         updated INTEGER NOT NULL,
@@ -132,8 +134,19 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                     )
                     """
                 )
+                addColumnIfMissing(stmt, "journals", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
+                addColumnIfMissing(stmt, "notes", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
             }
         }
+    }
+
+    private fun addColumnIfMissing(stmt: Statement, table: String, column: String, definition: String) {
+        stmt.executeQuery("PRAGMA table_info($table)").use { rs ->
+            while (rs.next()) {
+                if (rs.getString("name") == column) return
+            }
+        }
+        stmt.execute("ALTER TABLE $table ADD COLUMN $column $definition")
     }
 
     private fun <T> useConnection(block: (Connection) -> T): T {
@@ -198,6 +211,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             uid = rs.getString("uid"),
             title = rs.getString("title"),
             description = rs.getString("description"),
+            descriptionFormat = DescriptionFormat.valueOf(rs.getString("description_format")),
             dtstart = rs.getObject("dtstart") as? Long,
             dtend = rs.getObject("dtend") as? Long,
             categories = Json.decodeFromString(rs.getString("categories")),
@@ -216,6 +230,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             uid = rs.getString("uid"),
             title = rs.getString("title"),
             description = rs.getString("description"),
+            descriptionFormat = DescriptionFormat.valueOf(rs.getString("description_format")),
             categories = Json.decodeFromString(rs.getString("categories")),
             created = rs.getLong("created"),
             updated = rs.getLong("updated"),
@@ -385,22 +400,23 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO journals
-                   (id, uid, title, description, dtstart, dtend, categories, created, updated, color, location, comment, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, description_format, dtstart, dtend, categories, created, updated, color, location, comment, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
                 ps.setString(3, entry.title)
                 ps.setString(4, entry.description)
-                ps.setObject(5, entry.dtstart)
-                ps.setObject(6, entry.dtend)
-                ps.setString(7, Json.encodeToString(entry.categories))
-                ps.setLong(8, entry.created)
-                ps.setLong(9, entry.updated)
-                ps.setString(10, entry.color)
-                ps.setString(11, entry.location)
-                ps.setString(12, entry.comment)
-                ps.setInt(13, if (entry.archived) 1 else 0)
+                ps.setString(5, entry.descriptionFormat.name)
+                ps.setObject(6, entry.dtstart)
+                ps.setObject(7, entry.dtend)
+                ps.setString(8, Json.encodeToString(entry.categories))
+                ps.setLong(9, entry.created)
+                ps.setLong(10, entry.updated)
+                ps.setString(11, entry.color)
+                ps.setString(12, entry.location)
+                ps.setString(13, entry.comment)
+                ps.setInt(14, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
@@ -411,19 +427,20 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO notes
-                   (id, uid, title, description, categories, created, updated, color, location, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, description_format, categories, created, updated, color, location, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
                 ps.setString(3, entry.title)
                 ps.setString(4, entry.description)
-                ps.setString(5, Json.encodeToString(entry.categories))
-                ps.setLong(6, entry.created)
-                ps.setLong(7, entry.updated)
-                ps.setString(8, entry.color)
-                ps.setString(9, entry.location)
-                ps.setInt(10, if (entry.archived) 1 else 0)
+                ps.setString(5, entry.descriptionFormat.name)
+                ps.setString(6, Json.encodeToString(entry.categories))
+                ps.setLong(7, entry.created)
+                ps.setLong(8, entry.updated)
+                ps.setString(9, entry.color)
+                ps.setString(10, entry.location)
+                ps.setInt(11, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
