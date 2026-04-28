@@ -382,6 +382,21 @@ fun TaskDetailDialog(
                     style = MaterialTheme.typography.labelMedium,
                     color = if (entry.completed == true) androidx.compose.ui.graphics.Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (entry.subtasks.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Subtasks (desktop-local)",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    entry.subtasks.forEach { subtask ->
+                        Text(
+                            text = "${if (subtask.completed) "[x]" else "[ ]"} ${subtask.title}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 if (relatedEntries.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     RelatedEntriesSection(relatedEntries, onEntryClick = onRelatedEntryClick)
@@ -653,7 +668,7 @@ fun TaskEditDialog(
                 OutlinedTextField(
                     value = subtasks,
                     onValueChange = { subtasks = it },
-                    label = { Text("Subtasks ([x] Done)") },
+                    label = { Text("Subtasks ([x] Done, desktop-local)") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2
                 )

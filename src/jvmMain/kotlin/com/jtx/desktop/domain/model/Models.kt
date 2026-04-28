@@ -139,6 +139,9 @@ data class Subtask(
     val completed: Boolean
 )
 
+// Subtasks are stored as desktop-local checklist rows. Cross-entry hierarchy that
+// should sync through CalDAV is represented by relatedEntries/RELATED-TO instead.
+
 @Serializable
 data class RecurrenceRule(
     val frequency: RecurrenceFrequency,
