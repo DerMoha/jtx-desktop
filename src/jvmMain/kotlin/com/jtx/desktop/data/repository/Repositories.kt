@@ -242,14 +242,9 @@ class SyncRepository(
                     val fetchDataResult = calDavClient.fetchCalendarData(credentials, href)
                     fetchDataResult.fold(
                         onSuccess = { data ->
-                            val entry = when {
-                                data.contains("BEGIN:VJOURNAL") && settings.syncJournals -> parser.parseVJournal(data)
-                                data.contains("BEGIN:VTODO") && settings.syncTasks -> parser.parseVTodo(data)
-                                data.contains("BEGIN:VNOTE") && settings.syncNotes -> parser.parseVNote(data)
-                                else -> null
-                            }
+                            val entry = parser.parseEntry(data)
                             when (entry) {
-                                is JournalEntry -> {
+                                is JournalEntry -> if (settings.syncJournals) {
                                     val existing = local.getJournalById(entry.id)
                                     if (existing == null) {
                                         local.insertJournal(entry)
@@ -263,7 +258,7 @@ class SyncRepository(
                                         successCount++
                                     }
                                 }
-                                is NoteEntry -> {
+                                is NoteEntry -> if (settings.syncNotes) {
                                     val existing = local.getNoteById(entry.id)
                                     if (existing == null) {
                                         local.insertNote(entry)
@@ -277,7 +272,7 @@ class SyncRepository(
                                         successCount++
                                     }
                                 }
-                                is TaskEntry -> {
+                                is TaskEntry -> if (settings.syncTasks) {
                                     val existing = local.getTaskById(entry.id)
                                     if (existing == null) {
                                         local.insertTask(entry)

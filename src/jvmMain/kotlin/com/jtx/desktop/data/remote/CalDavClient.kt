@@ -140,6 +140,8 @@ class CalDavClient {
 
 class ICalendarParser {
 
+    private val ical4j = Ical4jEvaluation()
+
     private val commonKnownProperties = listOf(
         "BEGIN", "END", "VERSION", "PRODID", "UID", "DTSTAMP", "LAST-MODIFIED", "SUMMARY", "DESCRIPTION",
         "CATEGORIES", "CREATED", "COLOR", "X-APPLE-STRUCTURED-LOCATION", "RELATED-TO", "ATTACH"
@@ -162,6 +164,27 @@ class ICalendarParser {
             result.add(current.toString())
         }
         return result
+    }
+
+    fun parseEntry(ics: String): Any? {
+        val componentNames = parseComponentNames(ics)
+        return when {
+            "VTODO" in componentNames -> parseVTodo(ics)
+            "VNOTE" in componentNames -> parseVNote(ics)
+            "VJOURNAL" in componentNames -> parseVJournal(ics)
+            else -> null
+        }
+    }
+
+    private fun parseComponentNames(ics: String): Set<String> {
+        return runCatching {
+            ical4j.parseCalendar(ics).componentList.all.map { it.name.uppercase() }.toSet()
+        }.getOrElse {
+            unfoldLines(ics.lines())
+                .filter { it.startsWith("BEGIN:") }
+                .map { it.substringAfter("BEGIN:").trim().uppercase() }
+                .toSet()
+        }
     }
 
     fun parseVJournal(ics: String): JournalEntry? {
