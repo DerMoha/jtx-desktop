@@ -373,6 +373,27 @@ fun TaskDetailDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                if (entry.recurrenceDates.isNotEmpty()) {
+                    Text(
+                        "Additional dates: ${entry.recurrenceDates.joinToString { it.toDateTimeInput() }}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (entry.exceptionDates.isNotEmpty()) {
+                    Text(
+                        "Skipped dates: ${entry.exceptionDates.joinToString { it.toDateTimeInput() }}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                entry.recurrenceId?.let { recurrenceId ->
+                    Text(
+                        "Modified instance: ${recurrenceId.toDateTimeInput()}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 if (entry.progress != null) {
                     Text(
                         "Progress: ${entry.progress}%",
@@ -804,11 +825,16 @@ private fun Long.toDateTimeInput(): String = Instant.ofEpochMilli(this)
 private fun CombinedEntry.withNextRecurrenceDate(now: Long): CombinedEntry {
     val recurrenceRule = recurrenceRule ?: return this
     val firstDate = date ?: return this
-    if (firstDate >= now) return this
+    val exceptionDateSet = exceptionDates.toSet()
+    val extraOccurrence = recurrenceDates.filter { it >= now && it !in exceptionDateSet }.minOrNull()
+    if (firstDate >= now && firstDate !in exceptionDateSet) {
+        val nextDate = listOfNotNull(firstDate, extraOccurrence).minOrNull() ?: firstDate
+        return copy(date = nextDate)
+    }
 
     var occurrence = firstDate
     var occurrenceCount = 1
-    while (occurrence < now) {
+    while (occurrence < now || occurrence in exceptionDateSet) {
         val next = recurrenceRule.nextOccurrenceAfter(occurrence)
         if (next <= occurrence) return this
         occurrence = next
@@ -817,7 +843,8 @@ private fun CombinedEntry.withNextRecurrenceDate(now: Long): CombinedEntry {
         if (recurrenceRule.endDate != null && occurrence > recurrenceRule.endDate) return this
     }
 
-    return copy(date = occurrence)
+    val nextDate = listOfNotNull(occurrence, extraOccurrence).minOrNull() ?: occurrence
+    return copy(date = nextDate)
 }
 
 private fun RecurrenceRule.nextOccurrenceAfter(timestamp: Long): Long {

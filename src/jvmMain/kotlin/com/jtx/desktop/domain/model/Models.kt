@@ -182,6 +182,9 @@ data class CombinedEntry(
     val startDate: Long? = null,
     val priority: Priority = Priority.NONE,
     val recurrenceRule: RecurrenceRule? = null,
+    val recurrenceDates: List<Long> = emptyList(),
+    val exceptionDates: List<Long> = emptyList(),
+    val recurrenceId: Long? = null,
     val reminders: List<Reminder> = emptyList(),
     val subtasks: List<Subtask> = emptyList()
 )
