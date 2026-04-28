@@ -36,6 +36,7 @@ fun NotesScreen(
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
     listDensity: ListDensity = ListDensity.COMFORTABLE,
+    collectionFilter: String? = null,
     searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
@@ -60,8 +61,9 @@ fun NotesScreen(
         }
     }
 
-    val filteredNotes = remember(notes, searchQuery, sortOrder, showArchived) {
-        val base = if (showArchived) notes.filter { it.archived } else notes.filter { !it.archived }
+    val filteredNotes = remember(notes, searchQuery, sortOrder, showArchived, collectionFilter) {
+        val base = (if (showArchived) notes.filter { it.archived } else notes.filter { !it.archived })
+            .filter { collectionFilter == null || it.collectionUrl.matchesCollectionFilter(collectionFilter) }
         val searched = if (searchQuery.isBlank()) base else base.filter { entry ->
             entry.title.contains(searchQuery, ignoreCase = true) ||
             entry.description.contains(searchQuery, ignoreCase = true) ||
@@ -453,4 +455,10 @@ private fun chooseAttachmentUri(): String? {
     val directory = dialog.directory ?: return null
     val file = dialog.file ?: return null
     return java.io.File(directory, file).toURI().toString()
+}
+
+private fun String?.matchesCollectionFilter(collection: String): Boolean {
+    val current = this?.trimEnd('/') ?: return false
+    val target = collection.trimEnd('/')
+    return current == target || current.endsWith(target) || target.endsWith(current)
 }

@@ -42,6 +42,7 @@ fun JournalsScreen(
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
     listDensity: ListDensity = ListDensity.COMFORTABLE,
+    collectionFilter: String? = null,
     searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
@@ -66,8 +67,9 @@ fun JournalsScreen(
         }
     }
 
-    val filteredJournals = remember(journals, searchQuery, sortOrder, showArchived) {
-        val base = if (showArchived) journals.filter { it.archived } else journals.filter { !it.archived }
+    val filteredJournals = remember(journals, searchQuery, sortOrder, showArchived, collectionFilter) {
+        val base = (if (showArchived) journals.filter { it.archived } else journals.filter { !it.archived })
+            .filter { collectionFilter == null || it.collectionUrl.matchesCollectionFilter(collectionFilter) }
         val searched = if (searchQuery.isBlank()) base else base.filter { entry ->
             entry.title.contains(searchQuery, ignoreCase = true) ||
             entry.description.contains(searchQuery, ignoreCase = true) ||
@@ -505,4 +507,10 @@ private fun String.parseDateTimeInput(): Long? {
 private fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+private fun String?.matchesCollectionFilter(collection: String): Boolean {
+    val current = this?.trimEnd('/') ?: return false
+    val target = collection.trimEnd('/')
+    return current == target || current.endsWith(target) || target.endsWith(current)
 }

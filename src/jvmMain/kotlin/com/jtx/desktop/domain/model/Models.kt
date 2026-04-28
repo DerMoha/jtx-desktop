@@ -186,7 +186,8 @@ data class CombinedEntry(
     val exceptionDates: List<Long> = emptyList(),
     val recurrenceId: Long? = null,
     val reminders: List<Reminder> = emptyList(),
-    val subtasks: List<Subtask> = emptyList()
+    val subtasks: List<Subtask> = emptyList(),
+    val collectionUrl: String? = null
 )
 
 enum class SyncStatus {
@@ -250,7 +251,8 @@ data class AppSettings(
     val syncTasks: Boolean = true,
     val pendingSyncCount: Int = 0,
     val savedFilters: List<SavedFilter> = emptyList(),
-    val listDensity: ListDensity = ListDensity.COMFORTABLE
+    val listDensity: ListDensity = ListDensity.COMFORTABLE,
+    val collectionFilter: String? = null
 )
 
 @Serializable

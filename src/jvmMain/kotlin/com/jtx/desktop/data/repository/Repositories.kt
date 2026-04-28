@@ -6,6 +6,7 @@ import com.jtx.desktop.data.remote.CalDavHttpException
 import com.jtx.desktop.data.remote.ICalendarParser
 import com.jtx.desktop.domain.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -18,8 +19,13 @@ class JournalRepository(private val local: LocalDataSource) {
     }
 
     fun getAll(includeArchived: Boolean = false): Flow<List<JournalEntry>> = local.getAllJournals(includeArchived)
-    fun getAllCombined(includeArchived: Boolean = false): Flow<List<CombinedEntry>> = local.getAllJournals(includeArchived).map { journals ->
+    fun getAllCombined(includeArchived: Boolean = false): Flow<List<CombinedEntry>> = combine(
+        local.getAllJournals(includeArchived),
+        local.getAllObjectSyncMetadata()
+    ) { journals, metadata ->
+        val metadataByEntry = metadata.associateBy { it.entryType to it.entryId }
         journals.map { journal ->
+            val syncMetadata = metadataByEntry[EntryType.JOURNAL to journal.id]
             CombinedEntry(
                 id = journal.id,
                 type = EntryType.JOURNAL,
@@ -38,7 +44,8 @@ class JournalRepository(private val local: LocalDataSource) {
                 location = journal.location,
                 comments = journal.comments,
                 attachments = journal.attachments,
-                relatedEntries = journal.relatedEntries
+                relatedEntries = journal.relatedEntries,
+                collectionUrl = syncMetadata?.collectionUrl
             )
         }
     }
@@ -98,8 +105,13 @@ class NoteRepository(private val local: LocalDataSource) {
     }
 
     fun getAll(includeArchived: Boolean = false): Flow<List<NoteEntry>> = local.getAllNotes(includeArchived)
-    fun getAllCombined(includeArchived: Boolean = false): Flow<List<CombinedEntry>> = local.getAllNotes(includeArchived).map { notes ->
+    fun getAllCombined(includeArchived: Boolean = false): Flow<List<CombinedEntry>> = combine(
+        local.getAllNotes(includeArchived),
+        local.getAllObjectSyncMetadata()
+    ) { notes, metadata ->
+        val metadataByEntry = metadata.associateBy { it.entryType to it.entryId }
         notes.map { note ->
+            val syncMetadata = metadataByEntry[EntryType.NOTE to note.id]
             CombinedEntry(
                 id = note.id,
                 type = EntryType.NOTE,
@@ -117,7 +129,8 @@ class NoteRepository(private val local: LocalDataSource) {
                 progress = null,
                 completed = null,
                 archived = note.archived,
-                syncStatus = SyncStatus.SYNCED
+                syncStatus = SyncStatus.SYNCED,
+                collectionUrl = syncMetadata?.collectionUrl
             )
         }
     }
@@ -175,8 +188,13 @@ class TaskRepository(private val local: LocalDataSource) {
     }
 
     fun getAll(includeArchived: Boolean = false): Flow<List<TaskEntry>> = local.getAllTasks(includeArchived)
-    fun getAllCombined(includeArchived: Boolean = false): Flow<List<CombinedEntry>> = local.getAllTasks(includeArchived).map { tasks ->
+    fun getAllCombined(includeArchived: Boolean = false): Flow<List<CombinedEntry>> = combine(
+        local.getAllTasks(includeArchived),
+        local.getAllObjectSyncMetadata()
+    ) { tasks, metadata ->
+        val metadataByEntry = metadata.associateBy { it.entryType to it.entryId }
         tasks.map { task ->
+            val syncMetadata = metadataByEntry[EntryType.TASK to task.id]
             CombinedEntry(
                 id = task.id,
                 type = EntryType.TASK,
@@ -202,7 +220,8 @@ class TaskRepository(private val local: LocalDataSource) {
                 progress = task.progress,
                 completed = task.completed,
                 archived = task.archived,
-                syncStatus = SyncStatus.SYNCED
+                syncStatus = SyncStatus.SYNCED,
+                collectionUrl = syncMetadata?.collectionUrl
             )
         }
     }

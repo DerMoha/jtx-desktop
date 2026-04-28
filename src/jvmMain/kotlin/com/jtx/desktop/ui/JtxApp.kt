@@ -145,6 +145,8 @@ fun JtxApp(
     var listDensity by remember { mutableStateOf(ListDensity.COMFORTABLE) }
     var sortOrder by remember { mutableStateOf(SortOrder.DATE_DESC) }
     var showArchived by remember { mutableStateOf(false) }
+    var collectionFilter by remember { mutableStateOf<String?>(null) }
+    var showCollectionMenu by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     var isOffline by remember { mutableStateOf(false) }
     var searchFocused by remember { mutableStateOf(focusSearch) }
@@ -153,6 +155,7 @@ fun JtxApp(
     var showAboutDialog by remember { mutableStateOf(false) }
     var syncConflicts by remember { mutableStateOf<List<SyncRepository.SyncConflictInfo>>(emptyList()) }
     var allEntries by remember { mutableStateOf<List<CombinedEntry>>(emptyList()) }
+    var collections by remember { mutableStateOf<List<CalDavCollection>>(emptyList()) }
     var entryToOpen by remember { mutableStateOf<CombinedEntry?>(null) }
     var reminderTasks by remember { mutableStateOf<List<TaskEntry>>(emptyList()) }
     var reminderActionTask by remember { mutableStateOf<TaskEntry?>(null) }
@@ -164,6 +167,12 @@ fun JtxApp(
 
     var settings by remember { mutableStateOf<AppSettings?>(null) }
 
+    suspend fun saveCollectionFilter(filter: String?) {
+        val updated = (settings ?: AppSettings()).copy(collectionFilter = filter)
+        settings = updated
+        syncRepository.saveSettings(updated)
+    }
+
     LaunchedEffect(Unit) {
         combine(
             journalRepository.getAllCombined(includeArchived = true),
@@ -171,6 +180,10 @@ fun JtxApp(
             taskRepository.getAllCombined(includeArchived = true)
         ) { journals, notes, tasks -> journals + notes + tasks }
             .collect { allEntries = it }
+    }
+
+    LaunchedEffect(Unit) {
+        syncRepository.localDataSource.getAllCollections().collect { collections = it }
     }
 
     LaunchedEffect(Unit) {
@@ -541,6 +554,7 @@ fun JtxApp(
         settings?.let {
             darkModePreference = it.darkModePreference
             listDensity = it.listDensity
+            collectionFilter = it.collectionFilter
             sortOrder = when (it.sortPreference.field) {
                 SortField.DATE -> if (it.sortPreference.ascending) SortOrder.DATE_ASC else SortOrder.DATE_DESC
                 SortField.TITLE -> if (it.sortPreference.ascending) SortOrder.TITLE_ASC else SortOrder.TITLE_DESC
@@ -722,6 +736,58 @@ fun JtxApp(
                                 Text("Undo", color = MaterialTheme.colorScheme.onPrimary)
                             }
                         }
+                        if (collections.isNotEmpty()) {
+                            Box {
+                                TextButton(onClick = { showCollectionMenu = true }) {
+                                    Text(
+                                        text = collectionFilter.collectionLabel(collections),
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showCollectionMenu,
+                                    onDismissRequest = { showCollectionMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("All collections") },
+                                        onClick = {
+                                            collectionFilter = null
+                                            showCollectionMenu = false
+                                            scope.launch { saveCollectionFilter(null) }
+                                        },
+                                        leadingIcon = {
+                                            if (collectionFilter == null) {
+                                                Icon(Icons.Default.CheckCircle, contentDescription = "Selected")
+                                            }
+                                        }
+                                    )
+                                    collections.forEach { collection ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(collection.displayName.ifBlank { collection.url })
+                                                    Text(
+                                                        text = collection.url,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                collectionFilter = collection.url
+                                                showCollectionMenu = false
+                                                scope.launch { saveCollectionFilter(collection.url) }
+                                            },
+                                            leadingIcon = {
+                                                if (collectionFilter?.let { collection.url.matchesSelectedCollection(it) } == true) {
+                                                    Icon(Icons.Default.CheckCircle, contentDescription = "Selected")
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         IconButton(onClick = { showGlobalSearch = true }) {
                             Icon(Icons.Default.Search, contentDescription = "Global search", tint = MaterialTheme.colorScheme.onPrimary)
                         }
@@ -778,6 +844,7 @@ fun JtxApp(
                         sortOrder = sortOrder,
                         showArchived = showArchived,
                         listDensity = listDensity,
+                        collectionFilter = collectionFilter,
                         searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
@@ -796,6 +863,7 @@ fun JtxApp(
                         sortOrder = sortOrder,
                         showArchived = showArchived,
                         listDensity = listDensity,
+                        collectionFilter = collectionFilter,
                         searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
@@ -814,6 +882,7 @@ fun JtxApp(
                         sortOrder = sortOrder,
                         showArchived = showArchived,
                         listDensity = listDensity,
+                        collectionFilter = collectionFilter,
                         searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
@@ -860,6 +929,7 @@ fun JtxApp(
         if (showGlobalSearch) {
             GlobalSearchDialog(
                 entries = allEntries,
+                collectionFilter = collectionFilter,
                 savedFilters = settings?.savedFilters.orEmpty(),
                 onSaveFilter = { filter ->
                     val current = settings ?: AppSettings()
@@ -959,6 +1029,7 @@ private fun Any.conflictTitle(): String = when (this) {
 @Composable
 private fun GlobalSearchDialog(
     entries: List<CombinedEntry>,
+    collectionFilter: String?,
     savedFilters: List<SavedFilter>,
     onSaveFilter: (SavedFilter) -> Unit,
     onDismiss: () -> Unit,
@@ -984,7 +1055,8 @@ private fun GlobalSearchDialog(
         dueFrom,
         dueTo,
         modifiedOnly,
-        includeArchived
+        includeArchived,
+        collectionFilter
     ) {
         val from = dueFrom.parseMillisFilter()
         val to = dueTo.parseMillisFilter()
@@ -992,6 +1064,7 @@ private fun GlobalSearchDialog(
             .filter { entry -> query.isBlank() || entry.matchesGlobalSearch(query) }
             .filter { entry -> typeFilter == null || entry.type == typeFilter }
             .filter { entry -> includeArchived || !entry.archived }
+            .filter { entry -> collectionFilter == null || entry.collectionUrl.matchesSelectedCollection(collectionFilter) }
             .filter { entry -> categoryFilter.isBlank() || entry.categories.any { it.contains(categoryFilter, ignoreCase = true) } }
             .filter { entry -> priorityFilter == null || entry.priority == priorityFilter }
             .filter { entry -> entry.matchesStatus(statusFilter) }
@@ -1197,6 +1270,20 @@ private fun CombinedEntry.matchesStatus(status: TaskStatusFilter): Boolean = whe
 }
 
 private fun String.parseMillisFilter(): Long? = trim().takeIf { it.isNotBlank() }?.toLongOrNull()
+
+private fun String?.collectionLabel(collections: List<CalDavCollection>): String {
+    val selected = this ?: return "All collections"
+    return collections.firstOrNull { it.url.matchesSelectedCollection(selected) }
+        ?.displayName
+        ?.ifBlank { null }
+        ?: "Collection"
+}
+
+private fun String?.matchesSelectedCollection(collection: String): Boolean {
+    val current = this?.trimEnd('/') ?: return false
+    val target = collection.trimEnd('/')
+    return current == target || current.endsWith(target) || target.endsWith(current)
+}
 
 private fun CombinedEntry.matchesGlobalSearch(query: String): Boolean {
     val terms = query.trim().split(Regex("\\s+")).filter { it.isNotBlank() }

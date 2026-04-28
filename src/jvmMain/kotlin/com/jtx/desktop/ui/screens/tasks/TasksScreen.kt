@@ -46,6 +46,7 @@ fun TasksScreen(
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
     listDensity: ListDensity = ListDensity.COMFORTABLE,
+    collectionFilter: String? = null,
     searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
@@ -73,9 +74,10 @@ fun TasksScreen(
         }
     }
 
-    val filteredTasks = remember(tasks, searchQuery, sortOrder, showArchived, taskFilter) {
+    val filteredTasks = remember(tasks, searchQuery, sortOrder, showArchived, taskFilter, collectionFilter) {
         val now = System.currentTimeMillis()
-        var base = if (showArchived) tasks.filter { it.archived } else tasks.filter { !it.archived }
+        var base = (if (showArchived) tasks.filter { it.archived } else tasks.filter { !it.archived })
+            .filter { collectionFilter == null || it.collectionUrl.matchesCollectionFilter(collectionFilter) }
         base = base.map { it.withNextRecurrenceDate(now) }
         base = when (taskFilter) {
             TaskFilter.ALL -> base
@@ -914,4 +916,10 @@ private fun String.toSubtasks(existing: List<Subtask>): List<Subtask> = lines()
 private fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+private fun String?.matchesCollectionFilter(collection: String): Boolean {
+    val current = this?.trimEnd('/') ?: return false
+    val target = collection.trimEnd('/')
+    return current == target || current.endsWith(target) || target.endsWith(current)
 }
