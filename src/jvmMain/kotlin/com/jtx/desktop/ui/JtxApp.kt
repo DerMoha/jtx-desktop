@@ -234,7 +234,15 @@ fun JtxApp(
                 EntryType.TASK -> Tab.Tasks
             }
             snackbarMessage = "Created ${type.name.lowercase()}"
+            if (settings?.credentials != null) syncState = SyncState.PENDING
         }
+    }
+
+    fun syncStateForResult(result: SyncRepository.SyncResult): SyncState = when {
+        result.conflicts.isNotEmpty() -> SyncState.CONFLICT
+        result.failures.any { it.contains("read-only", ignoreCase = true) } -> SyncState.READ_ONLY
+        result.failureCount > 0 -> SyncState.ERROR
+        else -> SyncState.SUCCESS
     }
 
     fun syncNow() {
@@ -248,7 +256,7 @@ fun JtxApp(
             }
             if (!NetworkMonitor.isNetworkAvailable()) {
                 isOffline = true
-                syncState = SyncState.ERROR
+                syncState = SyncState.OFFLINE
                 snackbarMessage = "Offline; local changes will sync when connection returns"
                 return@launch
             }
@@ -257,7 +265,7 @@ fun JtxApp(
             val result = syncRepository.sync(credentials, collection)
             result.onSuccess { syncResult ->
                 syncConflicts = syncResult.conflicts
-                syncState = if (syncResult.conflicts.isEmpty()) SyncState.SUCCESS else SyncState.ERROR
+                syncState = syncStateForResult(syncResult)
                 snackbarMessage = if (syncResult.conflicts.isEmpty()) {
                     "Sync complete"
                 } else {
@@ -488,12 +496,13 @@ fun JtxApp(
                         settings?.collection?.let { col ->
                             if (!NetworkMonitor.isNetworkAvailable()) {
                                 isOffline = true
+                                syncState = SyncState.OFFLINE
                                 return@triggerSync
                             }
                             isOffline = false
                             syncState = SyncState.SYNCING
                             val result = syncRepository.sync(cred, col)
-                            syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
+                            syncState = result.getOrNull()?.let { syncStateForResult(it) } ?: SyncState.ERROR
                         }
                     }
                 }
@@ -504,12 +513,13 @@ fun JtxApp(
                         settings?.collection?.let { col ->
                             if (!NetworkMonitor.isNetworkAvailable()) {
                                 isOffline = true
+                                syncState = SyncState.OFFLINE
                                 return@triggerSync
                             }
                             isOffline = false
                             syncState = SyncState.SYNCING
                             val result = syncRepository.sync(cred, col)
-                            syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
+                            syncState = result.getOrNull()?.let { syncStateForResult(it) } ?: SyncState.ERROR
                         }
                     }
                 }
@@ -520,12 +530,13 @@ fun JtxApp(
                         settings?.collection?.let { col ->
                             if (!NetworkMonitor.isNetworkAvailable()) {
                                 isOffline = true
+                                syncState = SyncState.OFFLINE
                                 return@triggerSync
                             }
                             isOffline = false
                             syncState = SyncState.SYNCING
                             val result = syncRepository.sync(cred, col)
-                            syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
+                            syncState = result.getOrNull()?.let { syncStateForResult(it) } ?: SyncState.ERROR
                         }
                     }
                 }
@@ -539,12 +550,13 @@ fun JtxApp(
                     settings?.collection?.let { col ->
                         if (!NetworkMonitor.isNetworkAvailable()) {
                             isOffline = true
+                            syncState = SyncState.OFFLINE
                             return@schedulePeriodicSync
                         }
                         isOffline = false
                         syncState = SyncState.SYNCING
                         val result = syncRepository.sync(cred, col)
-                        syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
+                        syncState = result.getOrNull()?.let { syncStateForResult(it) } ?: SyncState.ERROR
                     }
                 }
             }
@@ -573,12 +585,14 @@ fun JtxApp(
     LaunchedEffect(syncState) {
         trayManager?.updateStatus(
             when {
-                isOffline -> TrayStatus.OFFLINE
+                isOffline || syncState == SyncState.OFFLINE -> TrayStatus.OFFLINE
                 else -> when (syncState) {
                     SyncState.IDLE -> TrayStatus.IDLE
                     SyncState.SYNCING -> TrayStatus.SYNCING
                     SyncState.SUCCESS -> TrayStatus.SUCCESS
-                    SyncState.ERROR -> TrayStatus.ERROR
+                    SyncState.PENDING -> TrayStatus.IDLE
+                    SyncState.ERROR, SyncState.CONFLICT, SyncState.READ_ONLY -> TrayStatus.ERROR
+                    SyncState.OFFLINE -> TrayStatus.OFFLINE
                 }
             }
         )
@@ -594,7 +608,18 @@ fun JtxApp(
         SyncState.IDLE -> Icons.Default.Refresh
         SyncState.SYNCING -> Icons.Default.Refresh
         SyncState.SUCCESS -> Icons.Default.CheckCircleIcon
-        SyncState.ERROR -> Icons.Default.Warning
+        SyncState.PENDING -> Icons.Default.Refresh
+        SyncState.ERROR, SyncState.CONFLICT, SyncState.OFFLINE, SyncState.READ_ONLY -> Icons.Default.Warning
+    }
+    val syncStateLabel = when (syncState) {
+        SyncState.IDLE -> null
+        SyncState.SYNCING -> "Syncing"
+        SyncState.SUCCESS -> "Synced"
+        SyncState.PENDING -> "Pending"
+        SyncState.ERROR -> "Error"
+        SyncState.CONFLICT -> "Conflict"
+        SyncState.OFFLINE -> "Offline"
+        SyncState.READ_ONLY -> "Read-only"
     }
 
     JtxBoardTheme(darkTheme = isDarkTheme) {
@@ -622,6 +647,13 @@ fun JtxApp(
                                     containerColor = MaterialTheme.colorScheme.errorContainer,
                                     labelColor = MaterialTheme.colorScheme.onErrorContainer
                                 ),
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                        }
+                        if (!isOffline && syncStateLabel != null) {
+                            AssistChip(
+                                onClick = {},
+                                label = { Text(syncStateLabel) },
                                 modifier = Modifier.padding(end = 8.dp)
                             )
                         }

@@ -297,5 +297,5 @@ data class SavedFilter(
 )
 
 enum class SyncState {
-    IDLE, SYNCING, SUCCESS, ERROR
+    IDLE, SYNCING, SUCCESS, PENDING, ERROR, CONFLICT, OFFLINE, READ_ONLY
 }
