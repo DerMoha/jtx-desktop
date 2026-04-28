@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.ResultSet
@@ -35,6 +38,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
     }
 
     private fun initializeDatabase() {
+        backupDatabaseIfMigrationNeeded()
         useConnection { conn ->
             val previousAutoCommit = conn.autoCommit
             conn.autoCommit = false
@@ -56,6 +60,41 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 conn.autoCommit = previousAutoCommit
             }
         }
+    }
+
+    private fun backupDatabaseIfMigrationNeeded() {
+        val databaseFile = File(dbPath)
+        if (!databaseFile.exists() || databaseFile.length() == 0L) return
+
+        val schemaVersion = useConnection { conn ->
+            conn.createStatement().use { stmt -> getSchemaVersion(stmt) }
+        }
+        if (schemaVersion >= CURRENT_SCHEMA_VERSION) return
+
+        val backupFile = migrationBackupFile(databaseFile, schemaVersion)
+        Files.copy(databaseFile.toPath(), backupFile.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
+        copySqliteSidecarIfPresent(databaseFile, backupFile, "-wal")
+        copySqliteSidecarIfPresent(databaseFile, backupFile, "-shm")
+    }
+
+    private fun migrationBackupFile(databaseFile: File, schemaVersion: Int): File {
+        val parent = databaseFile.parentFile ?: File(".")
+        val timestamp = System.currentTimeMillis()
+        return File(
+            parent,
+            "${databaseFile.name}.migration-v$schemaVersion-to-v$CURRENT_SCHEMA_VERSION.$timestamp.bak"
+        )
+    }
+
+    private fun copySqliteSidecarIfPresent(databaseFile: File, backupFile: File, suffix: String) {
+        val sidecar = File(databaseFile.path + suffix)
+        if (!sidecar.exists()) return
+
+        Files.copy(
+            sidecar.toPath(),
+            File(backupFile.path + suffix).toPath(),
+            StandardCopyOption.COPY_ATTRIBUTES
+        )
     }
 
     private fun createCurrentSchema(stmt: Statement) {
