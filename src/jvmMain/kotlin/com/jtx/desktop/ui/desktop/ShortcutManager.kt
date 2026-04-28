@@ -60,6 +60,8 @@ fun createAppMenuBar(
     onImport: () -> Unit,
     onExport: () -> Unit,
     onQuit: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
     onShowJournals: () -> Unit,
     onShowNotes: () -> Unit,
     onShowTasks: () -> Unit,
@@ -86,8 +88,12 @@ fun createAppMenuBar(
     fileMenu.add(quitItem)
 
     val editMenu = Menu("Edit")
-    editMenu.add(MenuItem("Undo", MenuShortcut(AWTKeyEvent.VK_Z)))
-    editMenu.add(MenuItem("Redo", MenuShortcut(AWTKeyEvent.VK_Y)))
+    val undoItem = MenuItem("Undo", MenuShortcut(AWTKeyEvent.VK_Z))
+    undoItem.addActionListener { onUndo() }
+    editMenu.add(undoItem)
+    val redoItem = MenuItem("Redo", MenuShortcut(AWTKeyEvent.VK_Y))
+    redoItem.addActionListener { onRedo() }
+    editMenu.add(redoItem)
 
     val viewMenu = Menu("View")
     val journalsItem = MenuItem("Journals")

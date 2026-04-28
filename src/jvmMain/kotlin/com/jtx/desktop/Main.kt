@@ -1,5 +1,9 @@
 package com.jtx.desktop
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
@@ -8,6 +12,7 @@ import com.jtx.desktop.data.local.SqliteLocalDataSource
 import com.jtx.desktop.data.remote.CalDavClient
 import com.jtx.desktop.data.remote.ICalendarParser
 import com.jtx.desktop.data.repository.SyncRepository
+import com.jtx.desktop.ui.AppMenuAction
 import com.jtx.desktop.ui.JtxApp
 import com.jtx.desktop.ui.desktop.TrayManager
 import com.jtx.desktop.ui.desktop.createAppMenuBar
@@ -34,6 +39,7 @@ fun main() = application {
     val windowState = WindowState(
         size = androidx.compose.ui.unit.DpSize(windowWidth, windowHeight)
     )
+    var menuAction by remember { mutableStateOf<AppMenuAction?>(null) }
 
     Window(
         onCloseRequest = {
@@ -52,10 +58,10 @@ fun main() = application {
         if (window is JFrame) {
             val frame = window as JFrame
             frame.menuBar = createAppMenuBar(
-                onNewEntry = { },
-                onSync = { },
-                onImport = { },
-                onExport = { },
+                onNewEntry = { menuAction = AppMenuAction.NEW_ENTRY },
+                onSync = { menuAction = AppMenuAction.SYNC },
+                onImport = { menuAction = AppMenuAction.IMPORT },
+                onExport = { menuAction = AppMenuAction.EXPORT },
                 onQuit = {
                     runBlocking {
                         val ws = windowRef?.bounds
@@ -70,12 +76,14 @@ fun main() = application {
                     trayManagerRef?.dispose()
                     exitApplication()
                 },
-                onShowJournals = { },
-                onShowNotes = { },
-                onShowTasks = { },
-                onShowKanban = { },
-                onShowSettings = { },
-                onAbout = { }
+                onUndo = { menuAction = AppMenuAction.UNDO },
+                onRedo = { menuAction = AppMenuAction.REDO },
+                onShowJournals = { menuAction = AppMenuAction.SHOW_JOURNALS },
+                onShowNotes = { menuAction = AppMenuAction.SHOW_NOTES },
+                onShowTasks = { menuAction = AppMenuAction.SHOW_TASKS },
+                onShowKanban = { menuAction = AppMenuAction.SHOW_KANBAN },
+                onShowSettings = { menuAction = AppMenuAction.SHOW_SETTINGS },
+                onAbout = { menuAction = AppMenuAction.ABOUT }
             )
         }
 
@@ -105,7 +113,9 @@ fun main() = application {
 
         JtxApp(
             syncRepository = syncRepository,
-            trayManager = tm
+            trayManager = tm,
+            menuAction = menuAction,
+            onMenuActionHandled = { menuAction = null }
         )
     }
 }

@@ -27,15 +27,21 @@ import com.jtx.desktop.ui.screens.notes.NotesScreen
 import com.jtx.desktop.ui.screens.tasks.TasksScreen
 import com.jtx.desktop.ui.screens.kanban.KanbanScreen
 import com.jtx.desktop.ui.screens.settings.SettingsScreen
+import com.jtx.desktop.data.remote.ICalendarParser
 import com.jtx.desktop.data.repository.SyncRepository
 import com.jtx.desktop.data.repository.JournalRepository
 import com.jtx.desktop.data.repository.NoteRepository
 import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.data.repository.TemplateRepository
 import com.jtx.desktop.domain.model.*
+import java.awt.FileDialog
+import java.io.File
 import java.awt.event.KeyEvent as AWTKeyEvent
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class Tab(val title: String, val icon: ImageVector) {
     Journals("Journals", Icons.AutoMirrored.Filled.List),
@@ -47,6 +53,21 @@ enum class Tab(val title: String, val icon: ImageVector) {
 
 enum class SortOrder {
     DATE_DESC, DATE_ASC, TITLE_ASC, TITLE_DESC, MODIFIED_DESC, MODIFIED_ASC
+}
+
+enum class AppMenuAction {
+    NEW_ENTRY,
+    SYNC,
+    IMPORT,
+    EXPORT,
+    UNDO,
+    REDO,
+    SHOW_JOURNALS,
+    SHOW_NOTES,
+    SHOW_TASKS,
+    SHOW_KANBAN,
+    SHOW_SETTINGS,
+    ABOUT
 }
 
 class UndoManager<T> {
@@ -83,12 +104,15 @@ enum class UndoType {
 fun JtxApp(
     syncRepository: SyncRepository,
     trayManager: TrayManager? = null,
-    focusSearch: Boolean = false
+    focusSearch: Boolean = false,
+    menuAction: AppMenuAction? = null,
+    onMenuActionHandled: () -> Unit = {}
 ) {
     val journalRepository = remember { JournalRepository(syncRepository.localDataSource) }
     val noteRepository = remember { NoteRepository(syncRepository.localDataSource) }
     val taskRepository = remember { TaskRepository(syncRepository.localDataSource) }
     val templateRepository = remember { TemplateRepository(syncRepository.localDataSource) }
+    val parser = remember { ICalendarParser() }
 
     var selectedTab by remember { mutableStateOf(Tab.Journals) }
     var showNewDialog by remember { mutableStateOf(false) }
@@ -100,6 +124,7 @@ fun JtxApp(
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     var isOffline by remember { mutableStateOf(false) }
     var searchFocused by remember { mutableStateOf(focusSearch) }
+    var showAboutDialog by remember { mutableStateOf(false) }
 
     val undoManager = remember { UndoManager<UndoAction>() }
     val scope = rememberCoroutineScope()
@@ -198,6 +223,119 @@ fun JtxApp(
         }
     }
 
+    fun syncNow() {
+        scope.launch {
+            val currentSettings = settings
+            val credentials = currentSettings?.credentials
+            val collection = currentSettings?.collection
+            if (credentials == null || collection == null) {
+                snackbarMessage = "Configure sync settings first"
+                return@launch
+            }
+            syncState = SyncState.SYNCING
+            val result = syncRepository.sync(credentials, collection)
+            syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
+            snackbarMessage = if (result.isSuccess) "Sync complete" else "Sync failed"
+        }
+    }
+
+    fun performUndo() {
+        val action = undoManager.undo()
+        if (action == null) {
+            snackbarMessage = "Nothing to undo"
+            return
+        }
+        when (action.type) {
+            UndoType.DELETE -> {
+                when (action.entry.type) {
+                    EntryType.JOURNAL -> scope.launch {
+                        journalRepository.insert(JournalEntry(
+                            action.entry.id, action.entry.id, action.entry.title,
+                            action.entry.description, DescriptionFormat.PLAIN, action.entry.date, null,
+                            action.entry.categories, System.currentTimeMillis(),
+                            System.currentTimeMillis(), action.entry.color, null, null, false
+                        ))
+                    }
+                    EntryType.NOTE -> scope.launch {
+                        noteRepository.insert(NoteEntry(
+                            action.entry.id, action.entry.id, action.entry.title,
+                            action.entry.description, DescriptionFormat.PLAIN, action.entry.categories,
+                            System.currentTimeMillis(), System.currentTimeMillis(),
+                            action.entry.color, null, false
+                        ))
+                    }
+                    EntryType.TASK -> scope.launch {
+                        taskRepository.insert(TaskEntry(
+                            action.entry.id, action.entry.id, action.entry.title,
+                            action.entry.description, null, null, false, 0,
+                            action.entry.categories, System.currentTimeMillis(),
+                            System.currentTimeMillis(), action.entry.color, null,
+                            emptyList(), emptyList(), null, false
+                        ))
+                    }
+                }
+            }
+            UndoType.CREATE -> {
+                when (action.entry.type) {
+                    EntryType.JOURNAL -> scope.launch { journalRepository.delete(action.entry.id) }
+                    EntryType.NOTE -> scope.launch { noteRepository.delete(action.entry.id) }
+                    EntryType.TASK -> scope.launch { taskRepository.delete(action.entry.id) }
+                }
+            }
+            UndoType.UPDATE -> {
+                if (action.previousState != null) {
+                    scope.launch {
+                        when (action.entry.type) {
+                            EntryType.JOURNAL -> journalRepository.updateJournal(action.previousState)
+                            EntryType.NOTE -> noteRepository.updateNote(action.previousState)
+                            EntryType.TASK -> taskRepository.updateTask(action.previousState)
+                        }
+                    }
+                }
+            }
+        }
+        snackbarMessage = "Undone: ${action.type.name.lowercase()}"
+    }
+
+    fun exportEntries() {
+        scope.launch {
+            val file = chooseFile("Export Entries", FileDialog.SAVE, "jtxboard-export.ics") ?: return@launch
+            val journals = journalRepository.getAll(includeArchived = true).first()
+            val notes = noteRepository.getAll(includeArchived = true).first()
+            val tasks = taskRepository.getAll(includeArchived = true).first()
+            val content = buildString {
+                journals.forEach { appendLine(parser.journalToIcs(it)) }
+                notes.forEach { appendLine(parser.noteToIcs(it)) }
+                tasks.forEach { appendLine(parser.taskToIcs(it)) }
+            }
+            withContext(Dispatchers.IO) { file.writeText(content) }
+            snackbarMessage = "Exported ${journals.size + notes.size + tasks.size} entries"
+        }
+    }
+
+    fun importEntries() {
+        scope.launch {
+            val file = chooseFile("Import Entry", FileDialog.LOAD, "*.ics") ?: return@launch
+            val content = withContext(Dispatchers.IO) { file.readText() }
+            val imported = when {
+                content.contains("BEGIN:VTODO") -> parser.parseVTodo(content)?.let {
+                    taskRepository.insert(it)
+                    1
+                } ?: 0
+                content.contains("BEGIN:VNOTE") -> parser.parseVNote(content)?.let {
+                    noteRepository.insert(it)
+                    1
+                } ?: 0
+                content.contains("BEGIN:VJOURNAL") -> parser.parseVJournal(content)?.let {
+                    journalRepository.insert(it)
+                    1
+                } ?: 0
+                else -> 0
+            }
+            snackbarMessage = if (imported > 0) "Imported $imported entry" else "No supported entry found"
+        }
+    }
+
     fun handleKeyboardShortcut(event: KeyEvent): Boolean {
         val awtEvent = event.nativeKeyEvent
         if (awtEvent !is AWTKeyEvent) return false
@@ -292,6 +430,25 @@ fun JtxApp(
         }
     }
 
+    LaunchedEffect(menuAction) {
+        when (menuAction) {
+            AppMenuAction.NEW_ENTRY -> showNewDialog = true
+            AppMenuAction.SYNC -> syncNow()
+            AppMenuAction.IMPORT -> importEntries()
+            AppMenuAction.EXPORT -> exportEntries()
+            AppMenuAction.UNDO -> performUndo()
+            AppMenuAction.REDO -> snackbarMessage = if (undoManager.canRedo()) "Redo unavailable" else "Nothing to redo"
+            AppMenuAction.SHOW_JOURNALS -> selectedTab = Tab.Journals
+            AppMenuAction.SHOW_NOTES -> selectedTab = Tab.Notes
+            AppMenuAction.SHOW_TASKS -> selectedTab = Tab.Tasks
+            AppMenuAction.SHOW_KANBAN -> selectedTab = Tab.Kanban
+            AppMenuAction.SHOW_SETTINGS -> selectedTab = Tab.Settings
+            AppMenuAction.ABOUT -> showAboutDialog = true
+            null -> Unit
+        }
+        if (menuAction != null) onMenuActionHandled()
+    }
+
     LaunchedEffect(syncState) {
         trayManager?.updateStatus(
             when {
@@ -341,74 +498,11 @@ fun JtxApp(
                             )
                         }
                         if (undoManager.canUndo()) {
-                            TextButton(onClick = {
-                                val action = undoManager.undo()
-                                if (action != null) {
-                                    when (action.type) {
-                                        UndoType.DELETE -> {
-                                            when (action.entry.type) {
-                                                EntryType.JOURNAL -> scope.launch {
-                                                    journalRepository.insert(JournalEntry(
-                                                        action.entry.id, action.entry.id, action.entry.title,
-                                                        action.entry.description, DescriptionFormat.PLAIN, action.entry.date, null,
-                                                        action.entry.categories, System.currentTimeMillis(),
-                                                        System.currentTimeMillis(), action.entry.color, null, null, false
-                                                    ))
-                                                }
-                                                EntryType.NOTE -> scope.launch {
-                                                    noteRepository.insert(NoteEntry(
-                                                        action.entry.id, action.entry.id, action.entry.title,
-                                                        action.entry.description, DescriptionFormat.PLAIN, action.entry.categories,
-                                                        System.currentTimeMillis(), System.currentTimeMillis(),
-                                                        action.entry.color, null, false
-                                                    ))
-                                                }
-                                                EntryType.TASK -> scope.launch {
-                                                    taskRepository.insert(TaskEntry(
-                                                        action.entry.id, action.entry.id, action.entry.title,
-                                                        action.entry.description, null, null, false, 0,
-                                                        action.entry.categories, System.currentTimeMillis(),
-                                                        System.currentTimeMillis(), action.entry.color, null,
-                                                        emptyList(), emptyList(), null, false
-                                                    ))
-                                                }
-                                            }
-                                        }
-                                        UndoType.CREATE -> {
-                                            when (action.entry.type) {
-                                                EntryType.JOURNAL -> scope.launch { journalRepository.delete(action.entry.id) }
-                                                EntryType.NOTE -> scope.launch { noteRepository.delete(action.entry.id) }
-                                                EntryType.TASK -> scope.launch { taskRepository.delete(action.entry.id) }
-                                            }
-                                        }
-                                        UndoType.UPDATE -> {
-                                            if (action.previousState != null) {
-                                                scope.launch {
-                                                    when (action.entry.type) {
-                                                        EntryType.JOURNAL -> journalRepository.updateJournal(action.previousState)
-                                                        EntryType.NOTE -> noteRepository.updateNote(action.previousState)
-                                                        EntryType.TASK -> taskRepository.updateTask(action.previousState)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    snackbarMessage = "Undone: ${action.type.name.lowercase()}"
-                                }
-                            }) {
+                            TextButton(onClick = { performUndo() }) {
                                 Text("Undo", color = MaterialTheme.colorScheme.onPrimary)
                             }
                         }
-                        IconButton(onClick = {
-                            scope.launch {
-                                syncState = SyncState.SYNCING
-                                val result = syncRepository.sync(
-                                    settings?.credentials ?: return@launch,
-                                    settings?.collection ?: return@launch
-                                )
-                                syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
-                            }
-                        }) {
+                        IconButton(onClick = { syncNow() }) {
                             Icon(syncStateIcon, contentDescription = "Sync", tint = MaterialTheme.colorScheme.onPrimary)
                         }
                     }
@@ -510,7 +604,29 @@ fun JtxApp(
                 templates = templateRepository.getTemplates()
             )
         }
+
+        if (showAboutDialog) {
+            AlertDialog(
+                onDismissRequest = { showAboutDialog = false },
+                title = { Text("About jtxBoard Desktop") },
+                text = { Text("Desktop-native companion for jtxBoard with local editing and CalDAV sync.") },
+                confirmButton = {
+                    TextButton(onClick = { showAboutDialog = false }) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
     }
+}
+
+private suspend fun chooseFile(title: String, mode: Int, defaultFile: String): File? = withContext(Dispatchers.IO) {
+    val dialog = FileDialog(null as java.awt.Frame?, title, mode).apply {
+        file = defaultFile
+        isVisible = true
+    }
+    val selectedFile = dialog.file ?: return@withContext null
+    File(dialog.directory, selectedFile)
 }
 
 @Composable
