@@ -1,6 +1,7 @@
 package com.jtx.desktop.ui.screens.kanban
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,6 +24,9 @@ import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.domain.model.CombinedEntry
 import com.jtx.desktop.domain.model.EntryType
 import com.jtx.desktop.domain.model.KanbanColumnConfig
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 data class KanbanColumn(
@@ -62,6 +66,7 @@ fun KanbanScreen(
     }
 
     val columnStepPx = with(LocalDensity.current) { 296.dp.toPx() }
+    var selectedEntry by remember { mutableStateOf<CombinedEntry?>(null) }
 
     LazyRow(
         modifier = Modifier.fillMaxSize(),
@@ -72,7 +77,7 @@ fun KanbanScreen(
             val column = columns[columnIndex]
             KanbanColumnCard(
                 column = column,
-                onEntryClick = { entry -> },
+                onEntryClick = { entry -> selectedEntry = entry },
                 onEntryDragEnd = { entry, offsetX ->
                     val columnOffset = (offsetX / columnStepPx).roundToInt()
                     val targetIndex = (columnIndex + columnOffset).coerceIn(columns.indices)
@@ -83,6 +88,13 @@ fun KanbanScreen(
                 isDropTarget = false
             )
         }
+    }
+
+    selectedEntry?.let { entry ->
+        KanbanTaskDetailDialog(
+            entry = entry,
+            onDismiss = { selectedEntry = null }
+        )
     }
 }
 
@@ -160,6 +172,7 @@ fun DraggableEntryCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .graphicsLayer {
                 translationX = offsetX
                 translationY = offsetY
@@ -221,6 +234,58 @@ fun DraggableEntryCard(
     }
 }
 
+@Composable
+private fun KanbanTaskDetailDialog(
+    entry: CombinedEntry,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(entry.title.ifEmpty { "(No title)" }, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column {
+                if (entry.description.isNotEmpty()) {
+                    Text(entry.description, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                entry.date?.let { due ->
+                    Text(
+                        "Due: ${formatDate(due)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                entry.progress?.let { progress ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Progress: $progress%",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { progress / 100f },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (entry.completed == true) "Status: Completed" else "Status: Pending",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
 private val defaultColumns = listOf(
     KanbanColumnConfig("todo", "To Do", 0xFF2196F3, 0, 0),
     KanbanColumnConfig("inprogress", "In Progress", 0xFFFFC107, 1, 99),
@@ -231,4 +296,9 @@ private fun progressForColumn(config: KanbanColumnConfig): Int = when {
     config.progressMax <= 0 -> 0
     config.progressMin >= 100 -> 100
     else -> ((config.progressMin + config.progressMax) / 2).coerceIn(0, 100)
+}
+
+private fun formatDate(timestamp: Long): String {
+    val sdf = SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault())
+    return sdf.format(Date(timestamp))
 }
