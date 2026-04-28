@@ -12,9 +12,11 @@ import javax.net.ssl.HttpsURLConnection
 class CalDavClient {
     private val connectTimeout = 30000
     private val readTimeout = 60000
+    private val maxRetries = 3
+    private val baseDelayMs = 1000L
 
     suspend fun fetchEntries(credentials: CalDavCredentials, collection: String): Result<List<String>> = withContext(Dispatchers.IO) {
-        try {
+        retryWithBackoff(maxRetries) {
             val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$collection").toString())
             val conn = url.openConnection() as HttpsURLConnection
             conn.connectTimeout = connectTimeout
@@ -42,13 +44,11 @@ class CalDavClient {
             }
 
             Result.success(parseHrefs(response))
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     suspend fun fetchCalendarData(credentials: CalDavCredentials, href: String): Result<String> = withContext(Dispatchers.IO) {
-        try {
+        retryWithBackoff(maxRetries) {
             val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$href").toString())
             val conn = url.openConnection() as HttpsURLConnection
             conn.connectTimeout = connectTimeout
@@ -63,13 +63,11 @@ class CalDavClient {
             } else {
                 Result.failure(Exception("HTTP $responseCode"))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     suspend fun putEntry(credentials: CalDavCredentials, href: String, icsContent: String): Result<String> = withContext(Dispatchers.IO) {
-        try {
+        retryWithBackoff(maxRetries) {
             val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$href").toString())
             val conn = url.openConnection() as HttpsURLConnection
             conn.connectTimeout = connectTimeout
@@ -87,13 +85,11 @@ class CalDavClient {
             } else {
                 Result.failure(Exception("HTTP $responseCode: ${conn.responseMessage}"))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     suspend fun deleteEntry(credentials: CalDavCredentials, href: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
+        retryWithBackoff(maxRetries) {
             val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$href").toString())
             val conn = url.openConnection() as HttpsURLConnection
             conn.connectTimeout = connectTimeout
@@ -107,9 +103,25 @@ class CalDavClient {
             } else {
                 Result.failure(Exception("HTTP $responseCode"))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
+    }
+
+    private suspend fun <T> retryWithBackoff(maxRetries: Int, operation: suspend () -> Result<T>): Result<T> {
+        var lastException: Exception? = null
+        for (attempt in 1..maxRetries) {
+            try {
+                val result = operation()
+                if (result.isSuccess) return result
+                lastException = result.exceptionOrNull() as? Exception
+            } catch (e: Exception) {
+                lastException = e
+            }
+            if (attempt < maxRetries) {
+                val delay = baseDelayMs * (1 shl (attempt - 1))
+                kotlinx.coroutines.delay(delay)
+            }
+        }
+        return Result.failure(lastException ?: Exception("All retries failed"))
     }
 
     private fun setAuth(conn: HttpsURLConnection, credentials: CalDavCredentials) {
