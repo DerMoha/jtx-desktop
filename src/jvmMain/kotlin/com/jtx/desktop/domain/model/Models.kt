@@ -188,6 +188,26 @@ data class EntryTemplate(
     val recurrence: RecurrenceRule? = null
 )
 
+@Serializable
+data class Tag(
+    val id: String,
+    val name: String,
+    val color: String,
+    val description: String = ""
+)
+
+@Serializable
+data class SavedFilter(
+    val id: String,
+    val name: String,
+    val entryType: EntryType? = null,
+    val categories: List<String> = emptyList(),
+    val priorities: List<Priority> = emptyList(),
+    val completed: Boolean? = null,
+    val dateFrom: Long? = null,
+    val dateTo: Long? = null
+)
+
 enum class SyncState {
     IDLE, SYNCING, SUCCESS, ERROR
 }

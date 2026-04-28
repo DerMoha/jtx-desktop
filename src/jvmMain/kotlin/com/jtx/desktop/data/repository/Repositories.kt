@@ -324,8 +324,154 @@ class TemplateRepository(private val local: LocalDataSource) {
         EntryTemplate("weekly_review", EntryType.TASK, "Weekly Review", categories = listOf("review"), recurrence = RecurrenceRule(RecurrenceFrequency.WEEKLY, 1))
     )
 
-    fun getTemplates(): List<EntryTemplate> = builtInTemplates
+    private val customTemplates = mutableListOf<EntryTemplate>()
+
+    fun getTemplates(): List<EntryTemplate> = builtInTemplates + customTemplates
 
     fun getTemplatesByType(type: EntryType): List<EntryTemplate> =
-        builtInTemplates.filter { it.type == type }
+        (builtInTemplates + customTemplates).filter { it.type == type }
+
+    fun getBuiltInTemplates(): List<EntryTemplate> = builtInTemplates
+
+    fun getCustomTemplates(): List<EntryTemplate> = customTemplates
+
+    fun addTemplate(template: EntryTemplate) {
+        customTemplates.add(template)
+    }
+
+    fun updateTemplate(template: EntryTemplate) {
+        val index = customTemplates.indexOfFirst { it.id == template.id }
+        if (index >= 0) {
+            customTemplates[index] = template
+        }
+    }
+
+    fun deleteTemplate(id: String) {
+        customTemplates.removeIf { it.id == id }
+    }
+
+    fun createTemplate(
+        name: String,
+        type: EntryType,
+        defaultTitle: String = "",
+        defaultDescription: String? = null,
+        categories: List<String> = emptyList(),
+        color: String? = null,
+        dueDays: Int? = null
+    ): EntryTemplate {
+        val template = EntryTemplate(
+            id = "custom_${System.currentTimeMillis()}",
+            type = type,
+            title = name,
+            description = defaultDescription,
+            categories = categories,
+            color = color,
+            dueDays = dueDays
+        )
+        addTemplate(template)
+        return template
+    }
+}
+
+class TagRepository(private val local: LocalDataSource) {
+    private val tags = mutableListOf<Tag>()
+
+    fun getTags(): List<Tag> = tags
+
+    fun getTagById(id: String): Tag? = tags.find { it.id == id }
+
+    fun addTag(tag: Tag) {
+        tags.add(tag)
+    }
+
+    fun updateTag(tag: Tag) {
+        val index = tags.indexOfFirst { it.id == tag.id }
+        if (index >= 0) {
+            tags[index] = tag
+        }
+    }
+
+    fun deleteTag(id: String) {
+        tags.removeIf { it.id == id }
+    }
+
+    fun createTag(name: String, color: String, description: String = ""): Tag {
+        val tag = Tag(
+            id = "tag_${System.currentTimeMillis()}",
+            name = name,
+            color = color,
+            description = description
+        )
+        addTag(tag)
+        return tag
+    }
+}
+
+class SavedFilterRepository(private val local: LocalDataSource) {
+    private val savedFilters = mutableListOf<SavedFilter>()
+
+    fun getSavedFilters(): List<SavedFilter> = savedFilters
+
+    fun getFilterById(id: String): SavedFilter? = savedFilters.find { it.id == id }
+
+    fun addFilter(filter: SavedFilter) {
+        savedFilters.add(filter)
+    }
+
+    fun updateFilter(filter: SavedFilter) {
+        val index = savedFilters.indexOfFirst { it.id == filter.id }
+        if (index >= 0) {
+            savedFilters[index] = filter
+        }
+    }
+
+    fun deleteFilter(id: String) {
+        savedFilters.removeIf { it.id == id }
+    }
+
+    fun createFilter(
+        name: String,
+        entryType: EntryType? = null,
+        categories: List<String> = emptyList(),
+        priorities: List<Priority> = emptyList(),
+        completed: Boolean? = null,
+        dateFrom: Long? = null,
+        dateTo: Long? = null
+    ): SavedFilter {
+        val filter = SavedFilter(
+            id = "filter_${System.currentTimeMillis()}",
+            name = name,
+            entryType = entryType,
+            categories = categories,
+            priorities = priorities,
+            completed = completed,
+            dateFrom = dateFrom,
+            dateTo = dateTo
+        )
+        addFilter(filter)
+        return filter
+    }
+
+    fun getDefaultFilters(): List<SavedFilter> = listOf(
+        SavedFilter("due_today", "Due Today", dateFrom = getStartOfDay(), dateTo = getEndOfDay()),
+        SavedFilter("high_priority", "High Priority", priorities = listOf(Priority.HIGH, Priority.URGENT))
+    )
+
+    private fun getStartOfDay(): Long {
+        return java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    private fun getEndOfDay(): Long {
+        return java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 23)
+            set(java.util.Calendar.MINUTE, 59)
+            set(java.util.Calendar.SECOND, 59)
+            set(java.util.Calendar.MILLISECOND, 999)
+        }.timeInMillis
+    }
 }
