@@ -46,6 +46,9 @@ interface LocalDataSource {
     suspend fun getAttachmentsForEntry(entryType: EntryType, entryId: String): List<EntryAttachment>
     suspend fun replaceEntryAttachments(entryType: EntryType, entryId: String, attachments: List<EntryAttachment>)
 
+    suspend fun getCommentsForEntry(entryType: EntryType, entryId: String): List<EntryComment>
+    suspend fun replaceEntryComments(entryType: EntryType, entryId: String, comments: List<EntryComment>)
+
     suspend fun getSettings(): AppSettings
     suspend fun saveSettings(settings: AppSettings)
 }

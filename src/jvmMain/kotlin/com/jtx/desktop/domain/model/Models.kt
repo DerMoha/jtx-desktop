@@ -21,6 +21,7 @@ data class JournalEntry(
     val comment: String?,
     val relatedEntries: List<String> = emptyList(),
     val attachments: List<EntryAttachment> = emptyList(),
+    val comments: List<EntryComment> = emptyList(),
     val archived: Boolean = false
 )
 
@@ -38,6 +39,7 @@ data class NoteEntry(
     val location: String? = null,
     val relatedEntries: List<String> = emptyList(),
     val attachments: List<EntryAttachment> = emptyList(),
+    val comments: List<EntryComment> = emptyList(),
     val archived: Boolean = false
 )
 
@@ -71,7 +73,8 @@ data class TaskEntry(
     val completedTimezone: String? = null,
     val recurrenceTimezone: String? = null,
     val recurrenceIdTimezone: String? = null,
-    val attachments: List<EntryAttachment> = emptyList()
+    val attachments: List<EntryAttachment> = emptyList(),
+    val comments: List<EntryComment> = emptyList()
 )
 
 @Serializable
@@ -81,6 +84,13 @@ data class EntryAttachment(
     val mimeType: String? = null,
     val size: Long? = null,
     val localPath: String? = null
+)
+
+@Serializable
+data class EntryComment(
+    val text: String,
+    val author: String? = null,
+    val created: Long? = null
 )
 
 @Serializable

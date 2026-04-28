@@ -175,6 +175,7 @@ class ICalendarParser {
             var comment: String? = null
             var relatedEntries = emptyList<String>()
             var attachments = emptyList<EntryAttachment>()
+            var comments = emptyList<EntryComment>()
 
             for (line in lines) {
                 when {
@@ -190,7 +191,11 @@ class ICalendarParser {
                     line.startsWith("CREATED:") -> created = parseIcsDate(line)
                     line.startsWith("DTSTAMP:") -> dtstamp = parseIcsDate(line)
                     line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
-                    line.startsWith("COMMENT:") -> comment = line.substringAfter("COMMENT:").trim()
+                    line.startsWith("COMMENT:") -> {
+                        val text = line.substringAfter("COMMENT:").trim()
+                        comment = comment ?: text
+                        comments = comments + EntryComment(text)
+                    }
                     line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
                     line.startsWith("ATTACH") -> attachments = attachments + parseAttachment(line)
                     line.startsWith("COLOR:") -> color = line.substringAfter("COLOR:").trim()
@@ -205,7 +210,8 @@ class ICalendarParser {
                 created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, comment = comment,
-                relatedEntries = relatedEntries, attachments = attachments
+                relatedEntries = relatedEntries, attachments = attachments,
+                comments = comments
             )
         } catch (e: Exception) { null }
     }
@@ -228,6 +234,7 @@ class ICalendarParser {
             var priority = Priority.NONE
             var relatedEntries = emptyList<String>()
             var attachments = emptyList<EntryAttachment>()
+            var comments = emptyList<EntryComment>()
             var recurrenceRule: RecurrenceRule? = null
             var recurrenceDates = emptyList<Long>()
             var exceptionDates = emptyList<Long>()
@@ -268,6 +275,7 @@ class ICalendarParser {
                     line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
                     line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
                     line.startsWith("ATTACH") -> attachments = attachments + parseAttachment(line)
+                    line.startsWith("COMMENT:") -> comments = comments + EntryComment(line.substringAfter("COMMENT:").trim())
                 }
             }
 
@@ -282,7 +290,7 @@ class ICalendarParser {
                 priority = priority, recurrenceRule = recurrenceRule, recurrenceDates = recurrenceDates,
                 exceptionDates = exceptionDates, recurrenceId = recurrenceId,
                 recurrenceTimezone = recurrenceTimezone, recurrenceIdTimezone = recurrenceIdTimezone,
-                attachments = attachments
+                attachments = attachments, comments = comments
             )
         } catch (e: Exception) { null }
     }
@@ -300,6 +308,7 @@ class ICalendarParser {
             var location: String? = null
             var relatedEntries = emptyList<String>()
             var attachments = emptyList<EntryAttachment>()
+            var comments = emptyList<EntryComment>()
 
             for (line in lines) {
                 when {
@@ -316,6 +325,7 @@ class ICalendarParser {
                     line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
                     line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
                     line.startsWith("ATTACH") -> attachments = attachments + parseAttachment(line)
+                    line.startsWith("COMMENT:") -> comments = comments + EntryComment(line.substringAfter("COMMENT:").trim())
                 }
             }
 
@@ -326,7 +336,7 @@ class ICalendarParser {
                 categories = categories, created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, relatedEntries = relatedEntries,
-                attachments = attachments
+                attachments = attachments, comments = comments
             )
         } catch (e: Exception) { null }
     }
@@ -346,7 +356,8 @@ class ICalendarParser {
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",")}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
-            if (entry.comment != null) appendLine("COMMENT:${entry.comment}")
+            entry.comments.ifEmpty { entry.comment?.let { listOf(EntryComment(it)) } ?: emptyList() }
+                .forEach { appendLine("COMMENT:${it.text}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
@@ -378,6 +389,7 @@ class ICalendarParser {
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",")}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
+            entry.comments.forEach { appendLine("COMMENT:${it.text}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
@@ -400,6 +412,7 @@ class ICalendarParser {
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",")}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
+            entry.comments.forEach { appendLine("COMMENT:${it.text}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
             appendLine("CREATED:${formatIcsDate(entry.created)}")

@@ -168,6 +168,19 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 )
                 stmt.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS comments (
+                        entry_type TEXT NOT NULL,
+                        entry_id TEXT NOT NULL,
+                        position INTEGER NOT NULL,
+                        text TEXT NOT NULL,
+                        author TEXT,
+                        created INTEGER,
+                        PRIMARY KEY (entry_type, entry_id, position)
+                    )
+                    """
+                )
+                stmt.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS settings (
                         key TEXT PRIMARY KEY,
                         value TEXT NOT NULL
@@ -278,6 +291,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             comment = rs.getString("comment"),
             relatedEntries = Json.decodeFromString(rs.getString("related_entries")),
             attachments = loadEntryAttachments(EntryType.JOURNAL, rs.getString("id")),
+            comments = loadEntryComments(EntryType.JOURNAL, rs.getString("id")),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -296,6 +310,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             location = rs.getString("location"),
             relatedEntries = Json.decodeFromString(rs.getString("related_entries")),
             attachments = loadEntryAttachments(EntryType.NOTE, rs.getString("id")),
+            comments = loadEntryComments(EntryType.NOTE, rs.getString("id")),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -330,7 +345,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             timezone = rs.getString("timezone"),
             archived = rs.getInt("archived") == 1,
             reminders = loadTaskReminders(rs.getString("id")),
-            attachments = loadEntryAttachments(EntryType.TASK, rs.getString("id"))
+            attachments = loadEntryAttachments(EntryType.TASK, rs.getString("id")),
+            comments = loadEntryComments(EntryType.TASK, rs.getString("id"))
         )
     }
 
@@ -367,6 +383,27 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                             mimeType = rs.getString("mime_type"),
                             size = if (rs.wasNull()) null else size,
                             localPath = rs.getString("local_path")
+                        )
+                    )
+                }
+                list
+            }
+        }
+    }
+
+    private fun loadEntryComments(entryType: EntryType, entryId: String): List<EntryComment> = useConnection { conn ->
+        conn.prepareStatement("SELECT * FROM comments WHERE entry_type = ? AND entry_id = ? ORDER BY position").use { ps ->
+            ps.setString(1, entryType.name)
+            ps.setString(2, entryId)
+            ps.executeQuery().use { rs ->
+                val list = mutableListOf<EntryComment>()
+                while (rs.next()) {
+                    val created = rs.getLong("created")
+                    list.add(
+                        EntryComment(
+                            text = rs.getString("text"),
+                            author = rs.getString("author"),
+                            created = if (rs.wasNull()) null else created
                         )
                     )
                 }
@@ -518,6 +555,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             loadEntryAttachments(entryType, entryId)
         }
 
+    override suspend fun getCommentsForEntry(entryType: EntryType, entryId: String): List<EntryComment> =
+        withContext(Dispatchers.IO) {
+            loadEntryComments(entryType, entryId)
+        }
+
     override suspend fun insertJournal(entry: JournalEntry) = withContext(Dispatchers.IO) {
         useConnection { conn ->
             conn.prepareStatement(
@@ -546,6 +588,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             }
         }
         replaceEntryAttachments(EntryType.JOURNAL, entry.id, entry.attachments)
+        replaceEntryComments(EntryType.JOURNAL, entry.id, entry.comments)
         _journals.value = loadJournals(includeArchived = true)
     }
 
@@ -572,6 +615,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             }
         }
         replaceEntryAttachments(EntryType.NOTE, entry.id, entry.attachments)
+        replaceEntryComments(EntryType.NOTE, entry.id, entry.comments)
         _notes.value = loadNotes(includeArchived = true)
     }
 
@@ -614,6 +658,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         }
         replaceTaskReminders(entry.id, entry.reminders)
         replaceEntryAttachments(EntryType.TASK, entry.id, entry.attachments)
+        replaceEntryComments(EntryType.TASK, entry.id, entry.comments)
         _tasks.value = loadTasks(includeArchived = true)
     }
 
@@ -751,6 +796,36 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         }
     }
 
+    override suspend fun replaceEntryComments(
+        entryType: EntryType,
+        entryId: String,
+        comments: List<EntryComment>
+    ): Unit = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("DELETE FROM comments WHERE entry_type = ? AND entry_id = ?").use { ps ->
+                ps.setString(1, entryType.name)
+                ps.setString(2, entryId)
+                ps.executeUpdate()
+            }
+            conn.prepareStatement(
+                """INSERT INTO comments
+                   (entry_type, entry_id, position, text, author, created)
+                   VALUES (?, ?, ?, ?, ?, ?)"""
+            ).use { ps ->
+                comments.forEachIndexed { index, comment ->
+                    ps.setString(1, entryType.name)
+                    ps.setString(2, entryId)
+                    ps.setInt(3, index)
+                    ps.setString(4, comment.text)
+                    ps.setString(5, comment.author)
+                    ps.setObject(6, comment.created)
+                    ps.addBatch()
+                }
+                ps.executeBatch()
+            }
+        }
+    }
+
     override suspend fun deleteJournal(id: String) = withContext(Dispatchers.IO) {
         useConnection { conn ->
             conn.prepareStatement("UPDATE journals SET archived = 1 WHERE id = ?").use { ps ->
@@ -863,6 +938,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(2, id)
                 ps.executeUpdate()
             }
+            conn.prepareStatement("DELETE FROM comments WHERE entry_type = ? AND entry_id = ?").use { ps ->
+                ps.setString(1, EntryType.JOURNAL.name)
+                ps.setString(2, id)
+                ps.executeUpdate()
+            }
             conn.prepareStatement("DELETE FROM journals WHERE id = ?").use { ps ->
                 ps.setString(1, id)
                 ps.executeUpdate()
@@ -874,6 +954,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
     override suspend fun permanentlyDeleteNote(id: String) = withContext(Dispatchers.IO) {
         useConnection { conn ->
             conn.prepareStatement("DELETE FROM attachments WHERE entry_type = ? AND entry_id = ?").use { ps ->
+                ps.setString(1, EntryType.NOTE.name)
+                ps.setString(2, id)
+                ps.executeUpdate()
+            }
+            conn.prepareStatement("DELETE FROM comments WHERE entry_type = ? AND entry_id = ?").use { ps ->
                 ps.setString(1, EntryType.NOTE.name)
                 ps.setString(2, id)
                 ps.executeUpdate()
@@ -893,6 +978,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.executeUpdate()
             }
             conn.prepareStatement("DELETE FROM attachments WHERE entry_type = ? AND entry_id = ?").use { ps ->
+                ps.setString(1, EntryType.TASK.name)
+                ps.setString(2, id)
+                ps.executeUpdate()
+            }
+            conn.prepareStatement("DELETE FROM comments WHERE entry_type = ? AND entry_id = ?").use { ps ->
                 ps.setString(1, EntryType.TASK.name)
                 ps.setString(2, id)
                 ps.executeUpdate()
