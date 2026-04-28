@@ -423,6 +423,9 @@ fun TaskEditDialog(
     var showRecurrence by remember { mutableStateOf(entry.recurrenceRule != null) }
     var recurrenceFrequency by remember { mutableStateOf(entry.recurrenceRule?.frequency ?: RecurrenceFrequency.WEEKLY) }
     var recurrenceInterval by remember { mutableIntStateOf(entry.recurrenceRule?.interval ?: 1) }
+    var recurrenceCount by remember { mutableStateOf(entry.recurrenceRule?.count?.toString().orEmpty()) }
+    var recurrenceEndDate by remember { mutableStateOf(entry.recurrenceRule?.endDate?.toDateTimeInput().orEmpty()) }
+    var recurrenceRawRule by remember { mutableStateOf(entry.recurrenceRule?.rawRule.orEmpty()) }
     var categories by remember { mutableStateOf(entry.categories.joinToString(", ")) }
     var color by remember { mutableStateOf(entry.color.orEmpty()) }
     var location by remember { mutableStateOf(entry.location.orEmpty()) }
@@ -557,6 +560,30 @@ fun TaskEditDialog(
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = recurrenceCount,
+                            onValueChange = { recurrenceCount = it.filter(Char::isDigit) },
+                            label = { Text("Count") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = recurrenceEndDate,
+                            onValueChange = { recurrenceEndDate = it },
+                            label = { Text("Until") },
+                            supportingText = { Text("Optional date/time") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = recurrenceRawRule,
+                        onValueChange = { recurrenceRawRule = it },
+                        label = { Text("Advanced RRULE") },
+                        supportingText = { Text("Optional. Example: FREQ=WEEKLY;BYDAY=MO,WE") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -630,7 +657,15 @@ fun TaskEditDialog(
                         completed = completed,
                         progress = progress,
                         priority = priority,
-                        recurrenceRule = if (showRecurrence) RecurrenceRule(recurrenceFrequency, recurrenceInterval.coerceAtLeast(1)) else null,
+                        recurrenceRule = if (showRecurrence) {
+                            RecurrenceRule(
+                                frequency = recurrenceFrequency,
+                                interval = recurrenceInterval.coerceAtLeast(1),
+                                endDate = recurrenceEndDate.parseDateTimeInput(),
+                                count = recurrenceCount.toIntOrNull(),
+                                rawRule = recurrenceRawRule.ifBlank { null }
+                            )
+                        } else null,
                         reminders = reminders.toCsvList().mapNotNull { it.toIntOrNull() }.map { Reminder(it) },
                         categories = categories.toCsvList(),
                         color = color.ifBlank { null },
