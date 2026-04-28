@@ -106,17 +106,30 @@ fun JtxApp(
 
     var settings by remember { mutableStateOf<AppSettings?>(null) }
 
-    fun createNewEntry(type: EntryType, title: String, description: String) {
+    fun createNewEntry(
+        type: EntryType,
+        title: String,
+        description: String,
+        categories: List<String>,
+        color: String?,
+        dueDays: Int?,
+        recurrenceRule: RecurrenceRule?
+    ) {
         val now = System.currentTimeMillis()
         val id = UUID.randomUUID().toString()
+        val due = dueDays?.let { now + it * 24L * 60L * 60L * 1000L }
         val combinedEntry = CombinedEntry(
             id = id,
             type = type,
             title = title,
             description = description,
-            date = if (type == EntryType.JOURNAL) now else null,
-            categories = emptyList(),
-            color = null,
+            date = when (type) {
+                EntryType.JOURNAL -> now
+                EntryType.TASK -> due
+                EntryType.NOTE -> null
+            },
+            categories = categories,
+            color = color,
             progress = if (type == EntryType.TASK) 0 else null,
             completed = if (type == EntryType.TASK) false else null
         )
@@ -132,10 +145,10 @@ fun JtxApp(
                         descriptionFormat = DescriptionFormat.PLAIN,
                         dtstart = now,
                         dtend = null,
-                        categories = emptyList(),
+                        categories = categories,
                         created = now,
                         updated = now,
-                        color = null,
+                        color = color,
                         location = null,
                         comment = null
                     )
@@ -147,10 +160,10 @@ fun JtxApp(
                         title = title,
                         description = description,
                         descriptionFormat = DescriptionFormat.PLAIN,
-                        categories = emptyList(),
+                        categories = categories,
                         created = now,
                         updated = now,
-                        color = null
+                        color = color
                     )
                 )
                 EntryType.TASK -> taskRepository.insert(
@@ -159,17 +172,18 @@ fun JtxApp(
                         uid = id,
                         title = title,
                         description = description,
-                        due = null,
+                        due = due,
                         start = null,
                         completed = false,
                         progress = 0,
-                        categories = emptyList(),
+                        categories = categories,
                         created = now,
                         updated = now,
-                        color = null,
+                        color = color,
                         location = null,
                         subtasks = emptyList(),
-                        relatedEntries = emptyList()
+                        relatedEntries = emptyList(),
+                        recurrenceRule = recurrenceRule
                     )
                 )
             }
@@ -488,8 +502,8 @@ fun JtxApp(
         if (showNewDialog) {
             NewEntryDialog(
                 onDismiss = { showNewDialog = false },
-                onCreate = { type, title, description ->
-                    createNewEntry(type, title, description)
+                onCreate = { type, title, description, categories, color, dueDays, recurrenceRule ->
+                    createNewEntry(type, title, description, categories, color, dueDays, recurrenceRule)
                     showNewDialog = false
                 },
                 templates = templateRepository.getTemplates()
@@ -501,12 +515,36 @@ fun JtxApp(
 @Composable
 fun NewEntryDialog(
     onDismiss: () -> Unit,
-    onCreate: (EntryType, String, String) -> Unit,
+    onCreate: (EntryType, String, String, List<String>, String?, Int?, RecurrenceRule?) -> Unit,
     templates: List<EntryTemplate> = emptyList()
 ) {
     var selectedType by remember { mutableStateOf<EntryType?>(null) }
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var categoryText by remember { mutableStateOf("") }
+    var color by remember { mutableStateOf<String?>(null) }
+    var dueDays by remember { mutableStateOf<Int?>(null) }
+    var recurrenceRule by remember { mutableStateOf<RecurrenceRule?>(null) }
+
+    fun applyTemplate(template: EntryTemplate) {
+        selectedType = template.type
+        title = template.title
+        description = template.description.orEmpty()
+        categoryText = template.categories.joinToString(", ")
+        color = template.color
+        dueDays = template.dueDays
+        recurrenceRule = template.recurrence
+    }
+
+    fun clearTemplateDefaults(type: EntryType) {
+        selectedType = type
+        title = ""
+        description = ""
+        categoryText = ""
+        color = null
+        dueDays = null
+        recurrenceRule = null
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -519,7 +557,7 @@ fun NewEntryDialog(
                     EntryType.TASK to "Task"
                 ).forEach { (type, label) ->
                     TextButton(
-                        onClick = { selectedType = type },
+                        onClick = { clearTemplateDefaults(type) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
@@ -548,8 +586,22 @@ fun NewEntryDialog(
                         maxLines = 5
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = categoryText,
+                        onValueChange = { categoryText = it },
+                        label = { Text("Categories") },
+                        placeholder = { Text("Comma-separated") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Creating a ${type.name.lowercase()}",
+                        text = buildString {
+                            append("Creating a ${type.name.lowercase()}")
+                            color?.let { append(" with color $it") }
+                            dueDays?.let { append(" due in $it day${if (it == 1) "" else "s"}") }
+                            recurrenceRule?.let { append(" repeating ${it.frequency.name.lowercase()}") }
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -559,9 +611,7 @@ fun NewEntryDialog(
                     Text("Templates:", style = MaterialTheme.typography.labelMedium)
                     templates.forEach { template ->
                         TextButton(
-                            onClick = {
-                                selectedType = template.type
-                            },
+                            onClick = { applyTemplate(template) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(template.title, style = MaterialTheme.typography.bodySmall)
@@ -573,7 +623,19 @@ fun NewEntryDialog(
         confirmButton = {
             TextButton(
                 enabled = selectedType != null,
-                onClick = { selectedType?.let { onCreate(it, title, description) } }
+                onClick = {
+                    selectedType?.let { type ->
+                        onCreate(
+                            type,
+                            title,
+                            description,
+                            categoryText.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+                            color,
+                            dueDays,
+                            recurrenceRule
+                        )
+                    }
+                }
             ) {
                 Text("Create")
             }
