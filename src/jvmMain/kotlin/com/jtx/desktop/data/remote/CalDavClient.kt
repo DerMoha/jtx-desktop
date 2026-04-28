@@ -292,8 +292,9 @@ class ICalendarParser {
                 "RECURRENCE-ID", "LOCATION", "COMMENT", "VALARM", "TRIGGER", "ACTION"
             )
             reminders = parseAlarms(lines)
+            unknownProperties = unknownProperties + parseUnsupportedAlarmProperties(lines)
 
-            for (line in lines) {
+            for (line in linesOutsideAlarms(lines)) {
                 if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
                 when {
                     line.isProperty("UID") -> uid = line.propertyValue()
@@ -755,6 +756,45 @@ class ICalendarParser {
         }
 
         return reminders
+    }
+
+    private fun parseUnsupportedAlarmProperties(lines: List<String>): List<UnknownProperty> {
+        val properties = mutableListOf<UnknownProperty>()
+        var alarmLines = mutableListOf<String>()
+        var inAlarm = false
+
+        for (line in lines) {
+            when {
+                line.equals("BEGIN:VALARM", ignoreCase = true) -> {
+                    inAlarm = true
+                    alarmLines = mutableListOf(line)
+                }
+                line.equals("END:VALARM", ignoreCase = true) && inAlarm -> {
+                    alarmLines.add(line)
+                    val trigger = alarmLines.firstOrNull { it.isProperty("TRIGGER") }?.propertyValue()
+                    if (parseReminderMinutes(trigger) == null) {
+                        properties.addAll(alarmLines.map { UnknownProperty(it) })
+                    }
+                    inAlarm = false
+                }
+                inAlarm -> alarmLines.add(line)
+            }
+        }
+
+        return properties
+    }
+
+    private fun linesOutsideAlarms(lines: List<String>): List<String> {
+        val result = mutableListOf<String>()
+        var inAlarm = false
+        for (line in lines) {
+            when {
+                line.equals("BEGIN:VALARM", ignoreCase = true) -> inAlarm = true
+                line.equals("END:VALARM", ignoreCase = true) -> inAlarm = false
+                !inAlarm -> result.add(line)
+            }
+        }
+        return result
     }
 
     private fun parseReminderMinutes(trigger: String?): Int? {
