@@ -144,7 +144,7 @@ class ICalendarParser {
 
     private val commonKnownProperties = listOf(
         "BEGIN", "END", "VERSION", "PRODID", "UID", "DTSTAMP", "LAST-MODIFIED", "SUMMARY", "DESCRIPTION",
-        "CALSCALE", "CATEGORIES", "CREATED", "COLOR", "X-APPLE-STRUCTURED-LOCATION", "RELATED-TO", "ATTACH"
+        "CALSCALE", "CATEGORIES", "CREATED", "COLOR", "SEQUENCE", "X-APPLE-STRUCTURED-LOCATION", "RELATED-TO", "ATTACH"
     )
 
     private fun unfoldLines(lines: List<String>): List<String> {
@@ -202,6 +202,8 @@ class ICalendarParser {
             var categories = mutableListOf<String>()
             var created: Long? = null
             var dtstamp: Long? = null
+            var lastModified: Long? = null
+            var sequence = 0
             var color: String? = null
             var location: String? = null
             var comment: String? = null
@@ -231,6 +233,8 @@ class ICalendarParser {
                     line.isProperty("CATEGORIES") -> categories = parseIcsTextList(line.propertyValue()).toMutableList()
                     line.isProperty("CREATED") -> created = parseIcsDate(line)
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
+                    line.isProperty("LAST-MODIFIED") -> lastModified = parseIcsDate(line)
+                    line.isProperty("SEQUENCE") -> sequence = line.propertyValue().toIntOrNull() ?: 0
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
                     line.isProperty("COMMENT") -> {
                         val text = line.propertyTextValue()
@@ -250,10 +254,11 @@ class ICalendarParser {
                 dtstart = dtstart, startTimezone = startTimezone,
                 dtend = dtend, endTimezone = endTimezone, categories = categories,
                 created = created ?: System.currentTimeMillis(),
-                updated = dtstamp ?: System.currentTimeMillis(),
+                updated = lastModified ?: dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, comment = comment,
                 relatedEntries = relatedEntries, attachments = attachments,
-                comments = comments, unknownProperties = unknownProperties
+                comments = comments, unknownProperties = unknownProperties,
+                sequence = sequence
             )
         } catch (e: Exception) { null }
     }
@@ -273,6 +278,8 @@ class ICalendarParser {
             var categories = mutableListOf<String>()
             var created: Long? = null
             var dtstamp: Long? = null
+            var lastModified: Long? = null
+            var sequence = 0
             var color: String? = null
             var location: String? = null
             var priority = Priority.NONE
@@ -330,6 +337,8 @@ class ICalendarParser {
                     line.isProperty("CATEGORIES") -> categories = parseIcsTextList(line.propertyValue()).toMutableList()
                     line.isProperty("CREATED") -> created = parseIcsDate(line)
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
+                    line.isProperty("LAST-MODIFIED") -> lastModified = parseIcsDate(line)
+                    line.isProperty("SEQUENCE") -> sequence = line.propertyValue().toIntOrNull() ?: 0
                     line.isProperty("LOCATION") -> location = line.propertyTextValue()
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
                     line.isProperty("COLOR") -> color = line.propertyValue()
@@ -345,7 +354,7 @@ class ICalendarParser {
                 id = uid, uid = uid, title = summary, description = description,
                 due = due, start = start, completed = completed, progress = progress,
                 categories = categories, created = created ?: System.currentTimeMillis(),
-                updated = dtstamp ?: System.currentTimeMillis(),
+                updated = lastModified ?: dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, subtasks = emptyList(), relatedEntries = relatedEntries,
                 priority = priority, recurrenceRule = recurrenceRule, recurrenceDates = recurrenceDates,
                 exceptionDates = exceptionDates, recurrenceId = recurrenceId,
@@ -353,7 +362,7 @@ class ICalendarParser {
                 dueTimezone = dueTimezone, startTimezone = startTimezone,
                 recurrenceTimezone = recurrenceTimezone, recurrenceIdTimezone = recurrenceIdTimezone,
                 attachments = attachments, comments = comments,
-                unknownProperties = unknownProperties
+                unknownProperties = unknownProperties, sequence = sequence
             )
         } catch (e: Exception) { null }
     }
@@ -367,6 +376,8 @@ class ICalendarParser {
             var categories = mutableListOf<String>()
             var created: Long? = null
             var dtstamp: Long? = null
+            var lastModified: Long? = null
+            var sequence = 0
             var color: String? = null
             var location: String? = null
             var relatedEntries = emptyList<String>()
@@ -387,6 +398,8 @@ class ICalendarParser {
                     line.isProperty("CATEGORIES") -> categories = parseIcsTextList(line.propertyValue()).toMutableList()
                     line.isProperty("CREATED") -> created = parseIcsDate(line)
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
+                    line.isProperty("LAST-MODIFIED") -> lastModified = parseIcsDate(line)
+                    line.isProperty("SEQUENCE") -> sequence = line.propertyValue().toIntOrNull() ?: 0
                     line.isProperty("COLOR") -> color = line.propertyValue()
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
                     line.isProperty("RELATED-TO") -> relatedEntries = relatedEntries + line.propertyValue()
@@ -400,10 +413,10 @@ class ICalendarParser {
             NoteEntry(
                 id = uid, uid = uid, title = summary, description = description,
                 categories = categories, created = created ?: System.currentTimeMillis(),
-                updated = dtstamp ?: System.currentTimeMillis(),
+                updated = lastModified ?: dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, relatedEntries = relatedEntries,
                 attachments = attachments, comments = comments,
-                unknownProperties = unknownProperties
+                unknownProperties = unknownProperties, sequence = sequence
             )
         } catch (e: Exception) { null }
     }
@@ -417,6 +430,8 @@ class ICalendarParser {
             var categories = mutableListOf<String>()
             var created: Long? = null
             var dtstamp: Long? = null
+            var lastModified: Long? = null
+            var sequence = 0
             var color: String? = null
             var location: String? = null
             var relatedEntries = emptyList<String>()
@@ -437,6 +452,8 @@ class ICalendarParser {
                     line.isProperty("CATEGORIES") -> categories = parseIcsTextList(line.propertyValue()).toMutableList()
                     line.isProperty("CREATED") -> created = parseIcsDate(line)
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
+                    line.isProperty("LAST-MODIFIED") -> lastModified = parseIcsDate(line)
+                    line.isProperty("SEQUENCE") -> sequence = line.propertyValue().toIntOrNull() ?: 0
                     line.isProperty("COLOR") -> color = line.propertyValue()
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
                     line.isProperty("RELATED-TO") -> relatedEntries = relatedEntries + line.propertyValue()
@@ -450,10 +467,10 @@ class ICalendarParser {
             NoteEntry(
                 id = uid, uid = uid, title = summary, description = description,
                 categories = categories, created = created ?: System.currentTimeMillis(),
-                updated = dtstamp ?: System.currentTimeMillis(),
+                updated = lastModified ?: dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, relatedEntries = relatedEntries,
                 attachments = attachments, comments = comments,
-                unknownProperties = unknownProperties
+                unknownProperties = unknownProperties, sequence = sequence
             )
         } catch (e: Exception) { null }
     }
@@ -474,6 +491,7 @@ class ICalendarParser {
             appendLine("BEGIN:VJOURNAL")
             appendLine("UID:${entry.uid}")
             appendLine("DTSTAMP:${formatIcsDate(entry.updated)}")
+            if (entry.sequence > 0) appendLine("SEQUENCE:${entry.sequence}")
             if (entry.dtstart != null) appendLine("DTSTART${entry.startTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.dtstart, entry.startTimezone)}")
             if (entry.dtend != null) appendLine("DTEND${entry.endTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.dtend, entry.endTimezone)}")
             appendLine("SUMMARY:${entry.title.escapeIcsText()}")
@@ -502,6 +520,7 @@ class ICalendarParser {
             appendLine("BEGIN:VTODO")
             appendLine("UID:${entry.uid}")
             appendLine("DTSTAMP:${formatIcsDate(entry.updated)}")
+            if (entry.sequence > 0) appendLine("SEQUENCE:${entry.sequence}")
             if (entry.start != null) appendLine("DTSTART${entry.startTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.start, entry.startTimezone)}")
             if (entry.due != null) appendLine("DUE${entry.dueTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.due, entry.dueTimezone)}")
             appendLine("SUMMARY:${entry.title.escapeIcsText()}")
@@ -537,6 +556,7 @@ class ICalendarParser {
             appendLine("BEGIN:VJOURNAL")
             appendLine("UID:${entry.uid}")
             appendLine("DTSTAMP:${formatIcsDate(entry.updated)}")
+            if (entry.sequence > 0) appendLine("SEQUENCE:${entry.sequence}")
             appendLine("SUMMARY:${entry.title.escapeIcsText()}")
             if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description.escapeIcsText()}")
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",") { it.escapeIcsText() }}")

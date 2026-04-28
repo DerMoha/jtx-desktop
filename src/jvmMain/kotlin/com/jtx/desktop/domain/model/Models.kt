@@ -23,6 +23,7 @@ data class JournalEntry(
     val attachments: List<EntryAttachment> = emptyList(),
     val comments: List<EntryComment> = emptyList(),
     val unknownProperties: List<UnknownProperty> = emptyList(),
+    val sequence: Int = 0,
     val archived: Boolean = false
 )
 
@@ -42,6 +43,7 @@ data class NoteEntry(
     val attachments: List<EntryAttachment> = emptyList(),
     val comments: List<EntryComment> = emptyList(),
     val unknownProperties: List<UnknownProperty> = emptyList(),
+    val sequence: Int = 0,
     val archived: Boolean = false
 )
 
@@ -77,7 +79,8 @@ data class TaskEntry(
     val recurrenceIdTimezone: String? = null,
     val attachments: List<EntryAttachment> = emptyList(),
     val comments: List<EntryComment> = emptyList(),
-    val unknownProperties: List<UnknownProperty> = emptyList()
+    val unknownProperties: List<UnknownProperty> = emptyList(),
+    val sequence: Int = 0
 )
 
 @Serializable

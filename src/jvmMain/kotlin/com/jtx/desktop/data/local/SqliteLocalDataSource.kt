@@ -117,6 +117,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 location TEXT,
                 comment TEXT,
                 related_entries TEXT NOT NULL DEFAULT '[]',
+                sequence INTEGER NOT NULL DEFAULT 0,
                 archived INTEGER DEFAULT 0
             )
             """
@@ -135,6 +136,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 color TEXT,
                 location TEXT,
                 related_entries TEXT NOT NULL DEFAULT '[]',
+                sequence INTEGER NOT NULL DEFAULT 0,
                 archived INTEGER DEFAULT 0
             )
             """
@@ -168,6 +170,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 recurrence_id_timezone TEXT,
                 priority TEXT NOT NULL DEFAULT 'NONE',
                 timezone TEXT,
+                sequence INTEGER NOT NULL DEFAULT 0,
                 archived INTEGER DEFAULT 0
             )
             """
@@ -279,8 +282,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         addColumnIfMissing(stmt, "journals", "dtstart_timezone", "TEXT")
         addColumnIfMissing(stmt, "journals", "dtend_timezone", "TEXT")
         addColumnIfMissing(stmt, "journals", "related_entries", "TEXT NOT NULL DEFAULT '[]'")
+        addColumnIfMissing(stmt, "journals", "sequence", "INTEGER NOT NULL DEFAULT 0")
         addColumnIfMissing(stmt, "notes", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
         addColumnIfMissing(stmt, "notes", "related_entries", "TEXT NOT NULL DEFAULT '[]'")
+        addColumnIfMissing(stmt, "notes", "sequence", "INTEGER NOT NULL DEFAULT 0")
         addColumnIfMissing(stmt, "tasks", "due_timezone", "TEXT")
         addColumnIfMissing(stmt, "tasks", "start_timezone", "TEXT")
         addColumnIfMissing(stmt, "tasks", "completed_timezone", "TEXT")
@@ -291,6 +296,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         addColumnIfMissing(stmt, "tasks", "recurrence_id_timezone", "TEXT")
         addColumnIfMissing(stmt, "tasks", "priority", "TEXT NOT NULL DEFAULT 'NONE'")
         addColumnIfMissing(stmt, "tasks", "timezone", "TEXT")
+        addColumnIfMissing(stmt, "tasks", "sequence", "INTEGER NOT NULL DEFAULT 0")
     }
 
     private fun getSchemaVersion(stmt: Statement): Int =
@@ -393,6 +399,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             attachments = loadEntryAttachments(EntryType.JOURNAL, rs.getString("id")),
             comments = loadEntryComments(EntryType.JOURNAL, rs.getString("id")),
             unknownProperties = loadEntryUnknownProperties(EntryType.JOURNAL, rs.getString("id")),
+            sequence = rs.getInt("sequence"),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -413,6 +420,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             attachments = loadEntryAttachments(EntryType.NOTE, rs.getString("id")),
             comments = loadEntryComments(EntryType.NOTE, rs.getString("id")),
             unknownProperties = loadEntryUnknownProperties(EntryType.NOTE, rs.getString("id")),
+            sequence = rs.getInt("sequence"),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -449,7 +457,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             reminders = loadTaskReminders(rs.getString("id")),
             attachments = loadEntryAttachments(EntryType.TASK, rs.getString("id")),
             comments = loadEntryComments(EntryType.TASK, rs.getString("id")),
-            unknownProperties = loadEntryUnknownProperties(EntryType.TASK, rs.getString("id"))
+            unknownProperties = loadEntryUnknownProperties(EntryType.TASK, rs.getString("id")),
+            sequence = rs.getInt("sequence")
         )
     }
 
@@ -686,8 +695,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO journals
-                   (id, uid, title, description, description_format, dtstart, dtstart_timezone, dtend, dtend_timezone, categories, created, updated, color, location, comment, related_entries, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, description_format, dtstart, dtstart_timezone, dtend, dtend_timezone, categories, created, updated, color, location, comment, related_entries, sequence, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -705,7 +714,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(14, entry.location)
                 ps.setString(15, entry.comment)
                 ps.setString(16, Json.encodeToString(entry.relatedEntries))
-                ps.setInt(17, if (entry.archived) 1 else 0)
+                ps.setInt(17, entry.sequence)
+                ps.setInt(18, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
@@ -719,8 +729,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO notes
-                   (id, uid, title, description, description_format, categories, created, updated, color, location, related_entries, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, description_format, categories, created, updated, color, location, related_entries, sequence, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -733,7 +743,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(9, entry.color)
                 ps.setString(10, entry.location)
                 ps.setString(11, Json.encodeToString(entry.relatedEntries))
-                ps.setInt(12, if (entry.archived) 1 else 0)
+                ps.setInt(12, entry.sequence)
+                ps.setInt(13, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
@@ -747,8 +758,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO tasks
-                   (id, uid, title, description, due, due_timezone, start, start_timezone, completed, completed_timezone, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, recurrence_dates, exception_dates, recurrence_id, recurrence_timezone, recurrence_id_timezone, priority, timezone, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, due, due_timezone, start, start_timezone, completed, completed_timezone, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, recurrence_dates, exception_dates, recurrence_id, recurrence_timezone, recurrence_id_timezone, priority, timezone, sequence, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -776,7 +787,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(24, entry.recurrenceIdTimezone)
                 ps.setString(25, entry.priority.name)
                 ps.setString(26, entry.timezone)
-                ps.setInt(27, if (entry.archived) 1 else 0)
+                ps.setInt(27, entry.sequence)
+                ps.setInt(28, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
