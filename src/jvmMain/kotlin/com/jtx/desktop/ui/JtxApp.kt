@@ -80,6 +80,7 @@ private fun EntryType.toTab(): Tab = when (this) {
 
 enum class AppMenuAction {
     NEW_ENTRY,
+    QUICK_ENTRY,
     SYNC,
     IMPORT,
     EXPORT,
@@ -90,6 +91,8 @@ enum class AppMenuAction {
     SHOW_TASKS,
     SHOW_KANBAN,
     SHOW_SETTINGS,
+    GLOBAL_SEARCH,
+    SHORTCUTS,
     ABOUT
 }
 
@@ -685,6 +688,7 @@ fun JtxApp(
     LaunchedEffect(menuAction) {
         when (menuAction) {
             AppMenuAction.NEW_ENTRY -> showNewDialog = true
+            AppMenuAction.QUICK_ENTRY -> showQuickEntryDialog = true
             AppMenuAction.SYNC -> syncNow()
             AppMenuAction.IMPORT -> importEntries()
             AppMenuAction.EXPORT -> exportEntries()
@@ -695,6 +699,8 @@ fun JtxApp(
             AppMenuAction.SHOW_TASKS -> selectedTab = Tab.Tasks
             AppMenuAction.SHOW_KANBAN -> selectedTab = Tab.Kanban
             AppMenuAction.SHOW_SETTINGS -> selectedTab = Tab.Settings
+            AppMenuAction.GLOBAL_SEARCH -> showGlobalSearch = true
+            AppMenuAction.SHORTCUTS -> showShortcutsDialog = true
             AppMenuAction.ABOUT -> showAboutDialog = true
             null -> Unit
         }

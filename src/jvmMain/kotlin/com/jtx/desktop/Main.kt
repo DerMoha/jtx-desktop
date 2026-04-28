@@ -63,6 +63,7 @@ fun main(args: Array<String>) = application {
             val frame = window as JFrame
             frame.menuBar = createAppMenuBar(
                 onNewEntry = { menuAction = AppMenuAction.NEW_ENTRY },
+                onQuickEntry = { menuAction = AppMenuAction.QUICK_ENTRY },
                 onSync = { menuAction = AppMenuAction.SYNC },
                 onImport = { menuAction = AppMenuAction.IMPORT },
                 onExport = { menuAction = AppMenuAction.EXPORT },
@@ -87,6 +88,8 @@ fun main(args: Array<String>) = application {
                 onShowTasks = { menuAction = AppMenuAction.SHOW_TASKS },
                 onShowKanban = { menuAction = AppMenuAction.SHOW_KANBAN },
                 onShowSettings = { menuAction = AppMenuAction.SHOW_SETTINGS },
+                onGlobalSearch = { menuAction = AppMenuAction.GLOBAL_SEARCH },
+                onShowShortcuts = { menuAction = AppMenuAction.SHORTCUTS },
                 onAbout = { menuAction = AppMenuAction.ABOUT }
             )
         }

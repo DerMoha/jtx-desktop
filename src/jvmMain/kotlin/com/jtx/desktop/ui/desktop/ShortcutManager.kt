@@ -56,6 +56,7 @@ class ShortcutManager(
 
 fun createAppMenuBar(
     onNewEntry: () -> Unit,
+    onQuickEntry: () -> Unit,
     onSync: () -> Unit,
     onImport: () -> Unit,
     onExport: () -> Unit,
@@ -67,6 +68,8 @@ fun createAppMenuBar(
     onShowTasks: () -> Unit,
     onShowKanban: () -> Unit,
     onShowSettings: () -> Unit,
+    onGlobalSearch: () -> Unit,
+    onShowShortcuts: () -> Unit,
     onAbout: () -> Unit
 ): MenuBar {
     val menuBar = MenuBar()
@@ -75,6 +78,13 @@ fun createAppMenuBar(
     val newEntryItem = MenuItem("New Entry", MenuShortcut(AWTKeyEvent.VK_N))
     newEntryItem.addActionListener { onNewEntry() }
     fileMenu.add(newEntryItem)
+    val quickEntryItem = MenuItem("Quick Entry", MenuShortcut(AWTKeyEvent.VK_N, true))
+    quickEntryItem.addActionListener { onQuickEntry() }
+    fileMenu.add(quickEntryItem)
+    fileMenu.addSeparator()
+    val syncItem = MenuItem("Sync Now", MenuShortcut(AWTKeyEvent.VK_S))
+    syncItem.addActionListener { onSync() }
+    fileMenu.add(syncItem)
     fileMenu.addSeparator()
     val importItem = MenuItem("Import...")
     importItem.addActionListener { onImport() }
@@ -94,6 +104,10 @@ fun createAppMenuBar(
     val redoItem = MenuItem("Redo", MenuShortcut(AWTKeyEvent.VK_Y))
     redoItem.addActionListener { onRedo() }
     editMenu.add(redoItem)
+    editMenu.addSeparator()
+    val searchItem = MenuItem("Search All Entries", MenuShortcut(AWTKeyEvent.VK_F))
+    searchItem.addActionListener { onGlobalSearch() }
+    editMenu.add(searchItem)
 
     val viewMenu = Menu("View")
     val journalsItem = MenuItem("Journals")
@@ -114,6 +128,10 @@ fun createAppMenuBar(
     viewMenu.add(settingsItem)
 
     val helpMenu = Menu("Help")
+    val shortcutsItem = MenuItem("Keyboard Shortcuts", MenuShortcut(AWTKeyEvent.VK_SLASH, true))
+    shortcutsItem.addActionListener { onShowShortcuts() }
+    helpMenu.add(shortcutsItem)
+    helpMenu.addSeparator()
     val aboutItem = MenuItem("About jtxBoard")
     aboutItem.addActionListener { onAbout() }
     helpMenu.add(aboutItem)
