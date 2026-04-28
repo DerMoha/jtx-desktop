@@ -84,8 +84,12 @@ class UndoManager<T> {
         redoStack.clear()
     }
 
-    fun undo(): T? = if (undoStack.isNotEmpty()) undoStack.removeLast() else null
-    fun redo(): T? = if (redoStack.isNotEmpty()) redoStack.removeLast() else null
+    fun undo(): T? = if (undoStack.isNotEmpty()) {
+        undoStack.removeLast().also { redoStack.add(it) }
+    } else null
+    fun redo(): T? = if (redoStack.isNotEmpty()) {
+        redoStack.removeLast().also { undoStack.add(it) }
+    } else null
     fun canUndo() = undoStack.isNotEmpty()
     fun canRedo() = redoStack.isNotEmpty()
     fun clear() {
@@ -247,6 +251,51 @@ fun JtxApp(
         }
     }
 
+    fun insertCombinedEntry(entry: CombinedEntry) {
+        val now = System.currentTimeMillis()
+        when (entry.type) {
+            EntryType.JOURNAL -> scope.launch {
+                journalRepository.insert(JournalEntry(
+                    entry.id, entry.id, entry.title, entry.description, DescriptionFormat.PLAIN,
+                    entry.date, null, entry.categories, entry.date ?: now, now,
+                    entry.color, null, null, entry.archived
+                ))
+            }
+            EntryType.NOTE -> scope.launch {
+                noteRepository.insert(NoteEntry(
+                    entry.id, entry.id, entry.title, entry.description, DescriptionFormat.PLAIN,
+                    entry.categories, entry.date ?: now, now, entry.color, null, entry.archived
+                ))
+            }
+            EntryType.TASK -> scope.launch {
+                taskRepository.insert(TaskEntry(
+                    entry.id, entry.id, entry.title, entry.description, entry.date, null,
+                    entry.completed ?: false, entry.progress ?: 0, entry.categories,
+                    entry.date ?: now, now, entry.color, null,
+                    emptyList(), emptyList(), null, entry.archived
+                ))
+            }
+        }
+    }
+
+    fun deleteCombinedEntry(entry: CombinedEntry) {
+        when (entry.type) {
+            EntryType.JOURNAL -> scope.launch { journalRepository.delete(entry.id) }
+            EntryType.NOTE -> scope.launch { noteRepository.delete(entry.id) }
+            EntryType.TASK -> scope.launch { taskRepository.delete(entry.id) }
+        }
+    }
+
+    fun updateCombinedEntry(entry: CombinedEntry) {
+        scope.launch {
+            when (entry.type) {
+                EntryType.JOURNAL -> journalRepository.updateJournal(entry)
+                EntryType.NOTE -> noteRepository.updateNote(entry)
+                EntryType.TASK -> taskRepository.updateTask(entry)
+            }
+        }
+    }
+
     fun performUndo() {
         val action = undoManager.undo()
         if (action == null) {
@@ -254,55 +303,27 @@ fun JtxApp(
             return
         }
         when (action.type) {
-            UndoType.DELETE -> {
-                when (action.entry.type) {
-                    EntryType.JOURNAL -> scope.launch {
-                        journalRepository.insert(JournalEntry(
-                            action.entry.id, action.entry.id, action.entry.title,
-                            action.entry.description, DescriptionFormat.PLAIN, action.entry.date, null,
-                            action.entry.categories, System.currentTimeMillis(),
-                            System.currentTimeMillis(), action.entry.color, null, null, false
-                        ))
-                    }
-                    EntryType.NOTE -> scope.launch {
-                        noteRepository.insert(NoteEntry(
-                            action.entry.id, action.entry.id, action.entry.title,
-                            action.entry.description, DescriptionFormat.PLAIN, action.entry.categories,
-                            System.currentTimeMillis(), System.currentTimeMillis(),
-                            action.entry.color, null, false
-                        ))
-                    }
-                    EntryType.TASK -> scope.launch {
-                        taskRepository.insert(TaskEntry(
-                            action.entry.id, action.entry.id, action.entry.title,
-                            action.entry.description, null, null, false, 0,
-                            action.entry.categories, System.currentTimeMillis(),
-                            System.currentTimeMillis(), action.entry.color, null,
-                            emptyList(), emptyList(), null, false
-                        ))
-                    }
-                }
-            }
-            UndoType.CREATE -> {
-                when (action.entry.type) {
-                    EntryType.JOURNAL -> scope.launch { journalRepository.delete(action.entry.id) }
-                    EntryType.NOTE -> scope.launch { noteRepository.delete(action.entry.id) }
-                    EntryType.TASK -> scope.launch { taskRepository.delete(action.entry.id) }
-                }
-            }
+            UndoType.DELETE -> insertCombinedEntry(action.entry)
+            UndoType.CREATE -> deleteCombinedEntry(action.entry)
             UndoType.UPDATE -> {
-                if (action.previousState != null) {
-                    scope.launch {
-                        when (action.entry.type) {
-                            EntryType.JOURNAL -> journalRepository.updateJournal(action.previousState)
-                            EntryType.NOTE -> noteRepository.updateNote(action.previousState)
-                            EntryType.TASK -> taskRepository.updateTask(action.previousState)
-                        }
-                    }
-                }
+                action.previousState?.let { updateCombinedEntry(it) }
             }
         }
         snackbarMessage = "Undone: ${action.type.name.lowercase()}"
+    }
+
+    fun performRedo() {
+        val action = undoManager.redo()
+        if (action == null) {
+            snackbarMessage = "Nothing to redo"
+            return
+        }
+        when (action.type) {
+            UndoType.DELETE -> deleteCombinedEntry(action.entry)
+            UndoType.CREATE -> insertCombinedEntry(action.entry)
+            UndoType.UPDATE -> updateCombinedEntry(action.entry)
+        }
+        snackbarMessage = "Redone: ${action.type.name.lowercase()}"
     }
 
     fun exportEntries() {
@@ -448,7 +469,7 @@ fun JtxApp(
             AppMenuAction.IMPORT -> importEntries()
             AppMenuAction.EXPORT -> exportEntries()
             AppMenuAction.UNDO -> performUndo()
-            AppMenuAction.REDO -> snackbarMessage = if (undoManager.canRedo()) "Redo unavailable" else "Nothing to redo"
+            AppMenuAction.REDO -> performRedo()
             AppMenuAction.SHOW_JOURNALS -> selectedTab = Tab.Journals
             AppMenuAction.SHOW_NOTES -> selectedTab = Tab.Notes
             AppMenuAction.SHOW_TASKS -> selectedTab = Tab.Tasks
