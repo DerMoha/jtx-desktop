@@ -489,19 +489,25 @@ fun JtxApp(
         snackbarMessage = "Redone: ${action.type.name.lowercase()}"
     }
 
-    fun exportEntries() {
+    suspend fun loadFullEntry(entry: CombinedEntry): Any? = when (entry.type) {
+        EntryType.JOURNAL -> journalRepository.getById(entry.id)
+        EntryType.NOTE -> noteRepository.getById(entry.id)
+        EntryType.TASK -> taskRepository.getById(entry.id)
+    }
+
+    fun exportEntries(selectedEntries: List<CombinedEntry>? = null) {
         scope.launch {
             val file = chooseFile("Export Entries", FileDialog.SAVE, "jtxboard-export.ics", "ics") ?: return@launch
-            val journals = journalRepository.getAll(includeArchived = true).first()
-            val notes = noteRepository.getAll(includeArchived = true).first()
-            val tasks = taskRepository.getAll(includeArchived = true).first()
+            val selectedCollection = collectionFilter
+            val entriesToExport = selectedEntries ?: allEntries.filter { entry ->
+                selectedCollection == null || entry.collectionUrl.matchesSelectedCollection(selectedCollection)
+            }
+            val fullEntries = entriesToExport.mapNotNull { loadFullEntry(it) }
             val content = buildString {
-                journals.forEach { append(parser.entryToIcs(it)) }
-                notes.forEach { append(parser.entryToIcs(it)) }
-                tasks.forEach { append(parser.entryToIcs(it)) }
+                fullEntries.forEach { append(parser.entryToIcs(it)) }
             }
             withContext(Dispatchers.IO) { file.writeText(content) }
-            snackbarMessage = "Exported ${journals.size + notes.size + tasks.size} entries"
+            snackbarMessage = "Exported ${fullEntries.size} entr${if (fullEntries.size == 1) "y" else "ies"}"
         }
     }
 
@@ -1005,6 +1011,10 @@ fun JtxApp(
                     selectedTab = entry.type.toTab()
                     entryToOpen = entry
                     showGlobalSearch = false
+                },
+                onExportEntries = { entries ->
+                    exportEntries(entries)
+                    showGlobalSearch = false
                 }
             )
         }
@@ -1163,7 +1173,8 @@ private fun GlobalSearchDialog(
     savedFilters: List<SavedFilter>,
     onSaveFilter: (SavedFilter) -> Unit,
     onDismiss: () -> Unit,
-    onOpenEntry: (CombinedEntry) -> Unit
+    onOpenEntry: (CombinedEntry) -> Unit,
+    onExportEntries: (List<CombinedEntry>) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
     var filterName by remember { mutableStateOf("") }
@@ -1380,8 +1391,16 @@ private fun GlobalSearchDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    onClick = { onExportEntries(results) },
+                    enabled = results.isNotEmpty()
+                ) {
+                    Text("Export Results")
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Close")
+                }
             }
         }
     )
