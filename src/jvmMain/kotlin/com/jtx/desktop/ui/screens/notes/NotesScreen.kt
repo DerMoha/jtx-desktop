@@ -17,6 +17,7 @@ import com.jtx.desktop.data.repository.NoteRepository
 import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
 import com.jtx.desktop.ui.components.EntryCard
+import com.jtx.desktop.ui.components.MarkdownText
 import com.jtx.desktop.ui.components.SearchBar
 import java.awt.FileDialog
 import java.awt.Frame
@@ -209,7 +210,7 @@ fun NoteDetailDialog(
         text = {
             Column {
                 if (entry.description.isNotEmpty()) {
-                    Text(entry.description, style = MaterialTheme.typography.bodyMedium)
+                    MarkdownText(entry.description, entry.descriptionFormat)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 if (entry.categories.isNotEmpty()) {
