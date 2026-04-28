@@ -51,6 +51,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                         color TEXT,
                         location TEXT,
                         comment TEXT,
+                        related_entries TEXT NOT NULL DEFAULT '[]',
                         archived INTEGER DEFAULT 0
                     )
                     """
@@ -68,6 +69,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                         updated INTEGER NOT NULL,
                         color TEXT,
                         location TEXT,
+                        related_entries TEXT NOT NULL DEFAULT '[]',
                         archived INTEGER DEFAULT 0
                     )
                     """
@@ -160,7 +162,9 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 addColumnIfMissing(stmt, "journals", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
                 addColumnIfMissing(stmt, "journals", "dtstart_timezone", "TEXT")
                 addColumnIfMissing(stmt, "journals", "dtend_timezone", "TEXT")
+                addColumnIfMissing(stmt, "journals", "related_entries", "TEXT NOT NULL DEFAULT '[]'")
                 addColumnIfMissing(stmt, "notes", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
+                addColumnIfMissing(stmt, "notes", "related_entries", "TEXT NOT NULL DEFAULT '[]'")
                 addColumnIfMissing(stmt, "tasks", "due_timezone", "TEXT")
                 addColumnIfMissing(stmt, "tasks", "start_timezone", "TEXT")
                 addColumnIfMissing(stmt, "tasks", "completed_timezone", "TEXT")
@@ -257,6 +261,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             color = rs.getString("color"),
             location = rs.getString("location"),
             comment = rs.getString("comment"),
+            relatedEntries = Json.decodeFromString(rs.getString("related_entries")),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -273,6 +278,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             updated = rs.getLong("updated"),
             color = rs.getString("color"),
             location = rs.getString("location"),
+            relatedEntries = Json.decodeFromString(rs.getString("related_entries")),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -470,8 +476,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO journals
-                   (id, uid, title, description, description_format, dtstart, dtstart_timezone, dtend, dtend_timezone, categories, created, updated, color, location, comment, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, description_format, dtstart, dtstart_timezone, dtend, dtend_timezone, categories, created, updated, color, location, comment, related_entries, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -488,7 +494,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(13, entry.color)
                 ps.setString(14, entry.location)
                 ps.setString(15, entry.comment)
-                ps.setInt(16, if (entry.archived) 1 else 0)
+                ps.setString(16, Json.encodeToString(entry.relatedEntries))
+                ps.setInt(17, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
@@ -499,8 +506,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO notes
-                   (id, uid, title, description, description_format, categories, created, updated, color, location, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, description_format, categories, created, updated, color, location, related_entries, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -512,7 +519,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setLong(8, entry.updated)
                 ps.setString(9, entry.color)
                 ps.setString(10, entry.location)
-                ps.setInt(11, if (entry.archived) 1 else 0)
+                ps.setString(11, Json.encodeToString(entry.relatedEntries))
+                ps.setInt(12, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }

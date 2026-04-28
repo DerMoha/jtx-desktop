@@ -173,6 +173,7 @@ class ICalendarParser {
             var color: String? = null
             var location: String? = null
             var comment: String? = null
+            var relatedEntries = emptyList<String>()
 
             for (line in lines) {
                 when {
@@ -189,6 +190,7 @@ class ICalendarParser {
                     line.startsWith("DTSTAMP:") -> dtstamp = parseIcsDate(line)
                     line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
                     line.startsWith("COMMENT:") -> comment = line.substringAfter("COMMENT:").trim()
+                    line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
                     line.startsWith("COLOR:") -> color = line.substringAfter("COLOR:").trim()
                 }
             }
@@ -200,7 +202,8 @@ class ICalendarParser {
                 dtstart = dtstart, dtend = dtend, categories = categories,
                 created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
-                color = color, location = location, comment = comment
+                color = color, location = location, comment = comment,
+                relatedEntries = relatedEntries
             )
         } catch (e: Exception) { null }
     }
@@ -221,6 +224,7 @@ class ICalendarParser {
             var color: String? = null
             var location: String? = null
             var priority = Priority.NONE
+            var relatedEntries = emptyList<String>()
             var recurrenceRule: RecurrenceRule? = null
             var recurrenceDates = emptyList<Long>()
             var exceptionDates = emptyList<Long>()
@@ -259,6 +263,7 @@ class ICalendarParser {
                     line.startsWith("DTSTAMP:") -> dtstamp = parseIcsDate(line)
                     line.startsWith("LOCATION:") -> location = line.substringAfter("LOCATION:").trim()
                     line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
+                    line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
                 }
             }
 
@@ -269,7 +274,7 @@ class ICalendarParser {
                 due = due, start = start, completed = completed, progress = progress,
                 categories = categories, created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
-                color = color, location = location, subtasks = emptyList(), relatedEntries = emptyList(),
+                color = color, location = location, subtasks = emptyList(), relatedEntries = relatedEntries,
                 priority = priority, recurrenceRule = recurrenceRule, recurrenceDates = recurrenceDates,
                 exceptionDates = exceptionDates, recurrenceId = recurrenceId,
                 recurrenceTimezone = recurrenceTimezone, recurrenceIdTimezone = recurrenceIdTimezone
@@ -288,6 +293,7 @@ class ICalendarParser {
             var dtstamp: Long? = null
             var color: String? = null
             var location: String? = null
+            var relatedEntries = emptyList<String>()
 
             for (line in lines) {
                 when {
@@ -302,6 +308,7 @@ class ICalendarParser {
                     line.startsWith("DTSTAMP:") -> dtstamp = parseIcsDate(line)
                     line.startsWith("COLOR:") -> color = line.substringAfter("COLOR:").trim()
                     line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
+                    line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
                 }
             }
 
@@ -311,7 +318,7 @@ class ICalendarParser {
                 id = uid, uid = uid, title = summary, description = description,
                 categories = categories, created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
-                color = color, location = location
+                color = color, location = location, relatedEntries = relatedEntries
             )
         } catch (e: Exception) { null }
     }
@@ -332,6 +339,7 @@ class ICalendarParser {
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
             if (entry.comment != null) appendLine("COMMENT:${entry.comment}")
+            entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VJOURNAL")
@@ -382,6 +390,7 @@ class ICalendarParser {
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",")}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
+            entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VNOTE")

@@ -19,6 +19,7 @@ data class JournalEntry(
     val color: String?,
     val location: String?,
     val comment: String?,
+    val relatedEntries: List<String> = emptyList(),
     val archived: Boolean = false
 )
 
@@ -34,6 +35,7 @@ data class NoteEntry(
     val updated: Long,
     val color: String?,
     val location: String? = null,
+    val relatedEntries: List<String> = emptyList(),
     val archived: Boolean = false
 )
 
