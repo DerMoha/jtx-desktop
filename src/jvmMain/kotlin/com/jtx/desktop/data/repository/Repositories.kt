@@ -82,7 +82,7 @@ class NoteRepository(private val local: LocalDataSource) {
                 type = EntryType.NOTE,
                 title = note.title,
                 description = note.description,
-                date = null,
+                date = note.created,
                 modified = note.updated,
                 categories = note.categories,
                 color = note.color,
