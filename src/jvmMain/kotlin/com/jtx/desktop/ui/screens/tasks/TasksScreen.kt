@@ -664,6 +664,8 @@ fun TaskEditDialog(
         },
         confirmButton = {
             TextButton(onClick = {
+                val normalizedProgress = if (completed) 100 else progress.coerceIn(0, 100)
+                val normalizedCompleted = completed || normalizedProgress >= 100
                 onSave(
                     entry.copy(
                         title = title,
@@ -671,8 +673,8 @@ fun TaskEditDialog(
                         descriptionFormat = descriptionFormat,
                         date = dueDate.parseDateTimeInput(),
                         startDate = startDate.parseDateTimeInput(),
-                        completed = completed,
-                        progress = progress,
+                        completed = normalizedCompleted,
+                        progress = normalizedProgress,
                         priority = priority,
                         recurrenceRule = if (showRecurrence) {
                             RecurrenceRule(
