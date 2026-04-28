@@ -94,6 +94,9 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                         subtasks TEXT NOT NULL,
                         related_entries TEXT NOT NULL,
                         recurrence_rule TEXT,
+                        recurrence_dates TEXT NOT NULL DEFAULT '[]',
+                        exception_dates TEXT NOT NULL DEFAULT '[]',
+                        recurrence_id INTEGER,
                         recurrence_timezone TEXT,
                         recurrence_id_timezone TEXT,
                         priority TEXT NOT NULL DEFAULT 'NONE',
@@ -161,6 +164,9 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 addColumnIfMissing(stmt, "tasks", "due_timezone", "TEXT")
                 addColumnIfMissing(stmt, "tasks", "start_timezone", "TEXT")
                 addColumnIfMissing(stmt, "tasks", "completed_timezone", "TEXT")
+                addColumnIfMissing(stmt, "tasks", "recurrence_dates", "TEXT NOT NULL DEFAULT '[]'")
+                addColumnIfMissing(stmt, "tasks", "exception_dates", "TEXT NOT NULL DEFAULT '[]'")
+                addColumnIfMissing(stmt, "tasks", "recurrence_id", "INTEGER")
                 addColumnIfMissing(stmt, "tasks", "recurrence_timezone", "TEXT")
                 addColumnIfMissing(stmt, "tasks", "recurrence_id_timezone", "TEXT")
                 addColumnIfMissing(stmt, "tasks", "priority", "TEXT NOT NULL DEFAULT 'NONE'")
@@ -292,6 +298,9 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             subtasks = Json.decodeFromString(rs.getString("subtasks")),
             relatedEntries = Json.decodeFromString(rs.getString("related_entries")),
             recurrenceRule = rs.getString("recurrence_rule")?.let { Json.decodeFromString(it) },
+            recurrenceDates = Json.decodeFromString(rs.getString("recurrence_dates")),
+            exceptionDates = Json.decodeFromString(rs.getString("exception_dates")),
+            recurrenceId = rs.getObject("recurrence_id") as? Long,
             recurrenceTimezone = rs.getString("recurrence_timezone"),
             recurrenceIdTimezone = rs.getString("recurrence_id_timezone"),
             priority = Priority.valueOf(rs.getString("priority")),
@@ -514,8 +523,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO tasks
-                   (id, uid, title, description, due, due_timezone, start, start_timezone, completed, completed_timezone, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, recurrence_timezone, recurrence_id_timezone, priority, timezone, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, due, due_timezone, start, start_timezone, completed, completed_timezone, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, recurrence_dates, exception_dates, recurrence_id, recurrence_timezone, recurrence_id_timezone, priority, timezone, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -536,11 +545,14 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(17, Json.encodeToString(entry.subtasks))
                 ps.setString(18, Json.encodeToString(entry.relatedEntries))
                 ps.setString(19, entry.recurrenceRule?.let { Json.encodeToString(it) })
-                ps.setString(20, entry.recurrenceTimezone)
-                ps.setString(21, entry.recurrenceIdTimezone)
-                ps.setString(22, entry.priority.name)
-                ps.setString(23, entry.timezone)
-                ps.setInt(24, if (entry.archived) 1 else 0)
+                ps.setString(20, Json.encodeToString(entry.recurrenceDates))
+                ps.setString(21, Json.encodeToString(entry.exceptionDates))
+                ps.setObject(22, entry.recurrenceId)
+                ps.setString(23, entry.recurrenceTimezone)
+                ps.setString(24, entry.recurrenceIdTimezone)
+                ps.setString(25, entry.priority.name)
+                ps.setString(26, entry.timezone)
+                ps.setInt(27, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }

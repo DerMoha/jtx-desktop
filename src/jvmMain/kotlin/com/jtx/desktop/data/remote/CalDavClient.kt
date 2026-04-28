@@ -221,6 +221,12 @@ class ICalendarParser {
             var color: String? = null
             var location: String? = null
             var priority = Priority.NONE
+            var recurrenceRule: RecurrenceRule? = null
+            var recurrenceDates = emptyList<Long>()
+            var exceptionDates = emptyList<Long>()
+            var recurrenceId: Long? = null
+            var recurrenceTimezone: String? = null
+            var recurrenceIdTimezone: String? = null
 
             for (line in lines) {
                 when {
@@ -235,6 +241,19 @@ class ICalendarParser {
                     line.startsWith("STATUS:COMPLETED") -> completed = true
                     line.startsWith("PERCENT-COMPLETE:") -> progress = line.substringAfter("PERCENT-COMPLETE:").trim().toIntOrNull() ?: 0
                     line.startsWith("PRIORITY:") -> priority = parsePriority(line.substringAfter("PRIORITY:").trim())
+                    line.startsWith("RRULE:") -> recurrenceRule = parseRecurrenceRule(line.substringAfter("RRULE:").trim())
+                    line.startsWith("RDATE") -> {
+                        recurrenceDates = recurrenceDates + parseDateList(line)
+                        recurrenceTimezone = recurrenceTimezone ?: parseTimezone(line)
+                    }
+                    line.startsWith("EXDATE") -> {
+                        exceptionDates = exceptionDates + parseDateList(line)
+                        recurrenceTimezone = recurrenceTimezone ?: parseTimezone(line)
+                    }
+                    line.startsWith("RECURRENCE-ID") -> {
+                        recurrenceId = parseIcsDate(line)
+                        recurrenceIdTimezone = parseTimezone(line)
+                    }
                     line.startsWith("CATEGORIES:") -> categories = line.substringAfter("CATEGORIES:").trim().split(",").map { it.trim() }.toMutableList()
                     line.startsWith("CREATED:") -> created = parseIcsDate(line)
                     line.startsWith("DTSTAMP:") -> dtstamp = parseIcsDate(line)
@@ -251,7 +270,9 @@ class ICalendarParser {
                 categories = categories, created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, subtasks = emptyList(), relatedEntries = emptyList(),
-                priority = priority
+                priority = priority, recurrenceRule = recurrenceRule, recurrenceDates = recurrenceDates,
+                exceptionDates = exceptionDates, recurrenceId = recurrenceId,
+                recurrenceTimezone = recurrenceTimezone, recurrenceIdTimezone = recurrenceIdTimezone
             )
         } catch (e: Exception) { null }
     }
@@ -333,6 +354,10 @@ class ICalendarParser {
             if (entry.completed) appendLine("STATUS:COMPLETED")
             appendLine("PERCENT-COMPLETE:${entry.progress}")
             if (entry.priority != Priority.NONE) appendLine("PRIORITY:${entry.priority.toIcsPriority()}")
+            entry.recurrenceRule?.let { appendLine("RRULE:${it.toIcsRRule()}") }
+            if (entry.recurrenceDates.isNotEmpty()) appendLine("RDATE${entry.recurrenceTimezone.toIcsTimezoneParam()}:${entry.recurrenceDates.joinToString(",") { formatIcsDate(it) }}")
+            if (entry.exceptionDates.isNotEmpty()) appendLine("EXDATE${entry.recurrenceTimezone.toIcsTimezoneParam()}:${entry.exceptionDates.joinToString(",") { formatIcsDate(it) }}")
+            if (entry.recurrenceId != null) appendLine("RECURRENCE-ID${entry.recurrenceIdTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.recurrenceId)}")
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",")}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
@@ -391,6 +416,54 @@ class ICalendarParser {
             5 -> Priority.MEDIUM
             in 6..9 -> Priority.LOW
             else -> Priority.NONE
+        }
+    }
+
+    private fun parseRecurrenceRule(value: String): RecurrenceRule? {
+        val parts = value.split(";").mapNotNull { part ->
+            val key = part.substringBefore("=", missingDelimiterValue = "").uppercase()
+            val partValue = part.substringAfter("=", missingDelimiterValue = "")
+            if (key.isBlank() || partValue.isBlank()) null else key to partValue
+        }.toMap()
+        val frequency = when (parts["FREQ"]?.uppercase()) {
+            "DAILY" -> RecurrenceFrequency.DAILY
+            "WEEKLY" -> RecurrenceFrequency.WEEKLY
+            "MONTHLY" -> RecurrenceFrequency.MONTHLY
+            "YEARLY" -> RecurrenceFrequency.YEARLY
+            else -> return null
+        }
+        return RecurrenceRule(
+            frequency = frequency,
+            interval = parts["INTERVAL"]?.toIntOrNull() ?: 1,
+            endDate = parts["UNTIL"]?.let { parseIcsDate("UNTIL:$it") },
+            count = parts["COUNT"]?.toIntOrNull()
+        )
+    }
+
+    private fun parseDateList(line: String): List<Long> {
+        return line.substringAfter(":")
+            .split(",")
+            .mapNotNull { parseIcsDate("DATE:${it.trim()}") }
+    }
+
+    private fun parseTimezone(line: String): String? {
+        return line.substringBefore(":")
+            .split(";")
+            .firstNotNullOfOrNull { part ->
+                part.takeIf { it.startsWith("TZID=", ignoreCase = true) }?.substringAfter("=")
+            }
+    }
+
+    private fun String?.toIcsTimezoneParam(): String {
+        return if (this.isNullOrBlank()) "" else ";TZID=$this"
+    }
+
+    private fun RecurrenceRule.toIcsRRule(): String {
+        return buildString {
+            append("FREQ=${frequency.name}")
+            if (interval != 1) append(";INTERVAL=$interval")
+            if (count != null) append(";COUNT=$count")
+            if (endDate != null) append(";UNTIL=${formatIcsDate(endDate)}")
         }
     }
 
