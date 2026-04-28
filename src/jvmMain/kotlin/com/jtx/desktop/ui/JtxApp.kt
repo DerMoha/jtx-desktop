@@ -41,6 +41,7 @@ import com.jtx.desktop.ui.screens.notes.NotesScreen
 import com.jtx.desktop.ui.screens.tasks.TasksScreen
 import com.jtx.desktop.ui.screens.kanban.KanbanScreen
 import com.jtx.desktop.ui.screens.settings.SettingsScreen
+import com.jtx.desktop.data.remote.CalDavHttpException
 import com.jtx.desktop.data.remote.ICalendarParser
 import com.jtx.desktop.data.repository.SyncRepository
 import com.jtx.desktop.data.repository.JournalRepository
@@ -354,14 +355,10 @@ fun JtxApp(
                 syncConflicts = syncResult.conflicts
                 settings = syncRepository.getSettings()
                 syncState = syncStateForResult(syncResult)
-                snackbarMessage = if (syncResult.conflicts.isEmpty()) {
-                    "Sync complete"
-                } else {
-                    "${syncResult.conflicts.size} sync conflict${if (syncResult.conflicts.size == 1) "" else "s"} need resolution"
-                }
-            }.onFailure {
+                snackbarMessage = syncResult.toUserFacingSyncMessage()
+            }.onFailure { error ->
                 syncState = SyncState.ERROR
-                snackbarMessage = "Sync failed"
+                snackbarMessage = error.toUserFacingSyncMessage()
             }
         }
     }
@@ -376,10 +373,15 @@ fun JtxApp(
             return
         }
         scope.launch {
-            syncRepository.resolveConflict(credentials, collection, conflict, resolution)
-            syncConflicts = syncConflicts.drop(1)
-            snackbarMessage = if (syncConflicts.isEmpty()) "Conflict resolved" else "Conflict resolved"
-            refreshTrigger++
+            runCatching {
+                syncRepository.resolveConflict(credentials, collection, conflict, resolution)
+            }.onSuccess {
+                syncConflicts = syncConflicts.drop(1)
+                snackbarMessage = "Conflict resolved"
+                refreshTrigger++
+            }.onFailure { error ->
+                snackbarMessage = error.toUserFacingSyncMessage(prefix = "Conflict resolution failed")
+            }
         }
     }
 
@@ -1522,6 +1524,59 @@ internal fun CombinedEntry.matchesGlobalSearch(query: String): Boolean {
             categories.any { it.contains(term, ignoreCase = true) }
     }
 }
+
+internal fun SyncRepository.SyncResult.toUserFacingSyncMessage(): String = when {
+    conflicts.isNotEmpty() -> "${conflicts.size} sync conflict${if (conflicts.size == 1) "" else "s"} need resolution"
+    failures.any { it.contains("read-only", ignoreCase = true) } -> "Collection is read-only; local changes remain queued"
+    failureCount > 0 -> {
+        val firstFailure = failures.firstOrNull()?.takeIf { it.isNotBlank() }
+        if (firstFailure == null) {
+            "Sync finished with $failureCount failure${if (failureCount == 1) "" else "s"}"
+        } else {
+            "Sync finished with $failureCount failure${if (failureCount == 1) "" else "s"}: ${firstFailure.toUserFacingFailureDetail()}"
+        }
+    }
+    else -> "Sync complete"
+}
+
+internal fun Throwable.toUserFacingSyncMessage(prefix: String = "Sync failed"): String {
+    val statusCode = (this as? CalDavHttpException)?.statusCode ?: message?.httpStatusCode()
+    val detail = when (statusCode) {
+        401 -> "authentication rejected; check username, password, or app password"
+        403 -> "server denied access to this collection"
+        404 -> "collection was not found; rediscover collections in Settings"
+        409, 412 -> "remote object changed; resolve the conflict and retry"
+        423 -> "server reports the object is locked"
+        429 -> "server rate limit reached; retry later"
+        in 500..599 -> "server error HTTP $statusCode; retry later"
+        else -> message?.toUserFacingFailureDetail() ?: "check sync settings and network connection"
+    }
+    return "$prefix: $detail"
+}
+
+private fun String.toUserFacingFailureDetail(): String {
+    val value = trim()
+    val statusCode = value.httpStatusCode()
+    return when (statusCode) {
+        401 -> "authentication rejected; check username, password, or app password"
+        403 -> "server denied access to this collection"
+        404 -> "collection was not found; rediscover collections in Settings"
+        409, 412 -> "remote object changed; resolve the conflict and retry"
+        in 500..599 -> "server error HTTP $statusCode; retry later"
+        else -> when {
+            value.contains("timed out", ignoreCase = true) || value.contains("timeout", ignoreCase = true) -> "connection timed out; retry when the server is reachable"
+            value.contains("unknownhost", ignoreCase = true) || value.contains("failed to connect", ignoreCase = true) -> "server is unreachable; check network and server URL"
+            value.isBlank() -> "check sync settings and network connection"
+            else -> value
+        }
+    }
+}
+
+private fun String.httpStatusCode(): Int? = Regex("HTTP\\s+(\\d{3})")
+    .find(this)
+    ?.groupValues
+    ?.getOrNull(1)
+    ?.toIntOrNull()
 
 internal data class QuickEntryDraft(
     val type: EntryType,
