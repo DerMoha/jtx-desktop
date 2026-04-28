@@ -58,6 +58,7 @@ class JournalRepository(private val local: LocalDataSource) {
         onDataChange?.invoke()
     }
     suspend fun delete(id: String) {
+        local.markDeleted(EntryType.JOURNAL, id)
         local.deleteJournal(id)
         onDataChange?.invoke()
     }
@@ -122,6 +123,7 @@ class NoteRepository(private val local: LocalDataSource) {
         onDataChange?.invoke()
     }
     suspend fun delete(id: String) {
+        local.markDeleted(EntryType.NOTE, id)
         local.deleteNote(id)
         onDataChange?.invoke()
     }
@@ -206,6 +208,7 @@ class TaskRepository(private val local: LocalDataSource) {
         onDataChange?.invoke()
     }
     suspend fun delete(id: String) {
+        local.markDeleted(EntryType.TASK, id)
         local.deleteTask(id)
         onDataChange?.invoke()
     }
@@ -288,6 +291,15 @@ private suspend fun LocalDataSource.markDirty(entry: TaskEntry, entryType: Entry
     )
 }
 
+private suspend fun LocalDataSource.markDeleted(entryType: EntryType, entryId: String) {
+    val existing = getObjectSyncMetadata(entryType, entryId) ?: return
+    if (existing.href == null) {
+        deleteObjectSyncMetadata(entryType, entryId)
+        return
+    }
+    upsertObjectSyncMetadata(existing.copy(dirty = true, deleted = true))
+}
+
 private fun Any.sequenceValue(): Int = when (this) {
     is JournalEntry -> sequence
     is NoteEntry -> sequence
@@ -336,7 +348,7 @@ class SyncRepository(
         val settings = local.getSettings()
         val discoveredCollections = discoverCollections(credentials).getOrNull().orEmpty()
         val collectionMetadata = discoveredCollections.findCollection(collection) ?: local.getCollectionByUrl(collection)
-        val uploadResult = uploadLocalCreates(credentials, collection) + uploadLocalUpdates(credentials)
+        val uploadResult = uploadLocalDeletes(credentials) + uploadLocalCreates(credentials, collection) + uploadLocalUpdates(credentials)
         val fetchResult = calDavClient.fetchEntries(credentials, collection)
         return fetchResult.fold(
             onSuccess = { hrefs ->
@@ -486,6 +498,32 @@ class SyncRepository(
                 onFailure = { error ->
                     failureCount++
                     failures.add("Failed to upload ${metadata.entryType.name.lowercase()} ${metadata.entryId}: ${error.message}")
+                }
+            )
+        }
+
+        return LocalUploadResult(successCount, failureCount, failures)
+    }
+
+    private suspend fun uploadLocalDeletes(credentials: CalDavCredentials): LocalUploadResult {
+        var successCount = 0
+        var failureCount = 0
+        val failures = mutableListOf<String>()
+        val deletes = local.getDirtyObjectSyncMetadata().filter { metadata ->
+            metadata.dirty && metadata.deleted && metadata.href != null
+        }
+
+        deletes.forEach { metadata ->
+            val href = metadata.href ?: return@forEach
+            val result = calDavClient.deleteEntry(credentials, href)
+            result.fold(
+                onSuccess = {
+                    local.upsertObjectSyncMetadata(metadata.copy(dirty = false, deleted = true))
+                    successCount++
+                },
+                onFailure = { error ->
+                    failureCount++
+                    failures.add("Failed to delete ${metadata.entryType.name.lowercase()} ${metadata.entryId}: ${error.message}")
                 }
             )
         }

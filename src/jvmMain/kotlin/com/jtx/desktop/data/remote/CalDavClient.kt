@@ -240,7 +240,7 @@ class CalDavClient {
             setAuth(conn, credentials)
 
             val responseCode = conn.responseCode
-            if (responseCode in 200..299) {
+            if (responseCode in 200..299 || responseCode == 404 || responseCode == 410) {
                 Result.success(Unit)
             } else {
                 Result.failure(Exception("HTTP $responseCode"))
