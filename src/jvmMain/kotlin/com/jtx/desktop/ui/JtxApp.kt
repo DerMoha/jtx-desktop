@@ -50,6 +50,7 @@ import com.jtx.desktop.data.repository.ConflictResolution
 import com.jtx.desktop.domain.model.*
 import java.awt.FileDialog
 import java.io.File
+import java.io.FilenameFilter
 import java.awt.event.KeyEvent as AWTKeyEvent
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -490,7 +491,7 @@ fun JtxApp(
 
     fun exportEntries() {
         scope.launch {
-            val file = chooseFile("Export Entries", FileDialog.SAVE, "jtxboard-export.ics") ?: return@launch
+            val file = chooseFile("Export Entries", FileDialog.SAVE, "jtxboard-export.ics", "ics") ?: return@launch
             val journals = journalRepository.getAll(includeArchived = true).first()
             val notes = noteRepository.getAll(includeArchived = true).first()
             val tasks = taskRepository.getAll(includeArchived = true).first()
@@ -526,7 +527,7 @@ fun JtxApp(
 
     fun importEntries() {
         scope.launch {
-            val file = chooseFile("Import Entry", FileDialog.LOAD, "*.ics") ?: return@launch
+            val file = chooseFile("Import Entry", FileDialog.LOAD, "*.ics", "ics") ?: return@launch
             val imported = importIcsFile(file)
             snackbarMessage = if (imported > 0) "Imported $imported entry" else "No supported entry found"
         }
@@ -1515,13 +1516,21 @@ private fun String.toQuickEntryDraft(defaultType: EntryType): QuickEntryDraft? {
     )
 }
 
-private suspend fun chooseFile(title: String, mode: Int, defaultFile: String): File? = withContext(Dispatchers.IO) {
+private suspend fun chooseFile(title: String, mode: Int, defaultFile: String, extension: String? = null): File? = withContext(Dispatchers.IO) {
     val dialog = FileDialog(null as java.awt.Frame?, title, mode).apply {
         file = defaultFile
+        if (extension != null) {
+            filenameFilter = FilenameFilter { _, name -> name.endsWith(".$extension", ignoreCase = true) }
+        }
         isVisible = true
     }
     val selectedFile = dialog.file ?: return@withContext null
-    File(dialog.directory, selectedFile)
+    File(dialog.directory, selectedFile).withExtensionIfMissing(mode, extension)
+}
+
+private fun File.withExtensionIfMissing(mode: Int, extension: String?): File {
+    if (mode != FileDialog.SAVE || extension == null || name.endsWith(".$extension", ignoreCase = true)) return this
+    return File(parentFile, "$name.$extension")
 }
 
 @Composable
