@@ -116,7 +116,13 @@ data class AppSettings(
     val windowWidth: Int? = null,
     val windowHeight: Int? = null,
     val autoSyncIntervalMinutes: Int = 15,
-    val syncOnChange: Boolean = true
+    val syncOnChange: Boolean = true,
+    val syncToken: String? = null,
+    val serverCtag: String? = null,
+    val syncJournals: Boolean = true,
+    val syncNotes: Boolean = true,
+    val syncTasks: Boolean = true,
+    val pendingSyncCount: Int = 0
 )
 
 @Serializable

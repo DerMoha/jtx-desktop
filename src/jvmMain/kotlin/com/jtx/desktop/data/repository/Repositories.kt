@@ -179,16 +179,27 @@ class SyncRepository(
     data class SyncResult(
         val successCount: Int,
         val failureCount: Int,
-        val failures: List<String>
+        val failures: List<String>,
+        val conflicts: List<SyncConflictInfo> = emptyList()
+    )
+
+    data class SyncConflictInfo(
+        val localEntry: Any,
+        val serverEntry: Any,
+        val serverHref: String,
+        val localUpdated: Long,
+        val serverUpdated: Long
     )
 
     suspend fun sync(credentials: CalDavCredentials, collection: String): Result<SyncResult> {
+        val settings = local.getSettings()
         val fetchResult = calDavClient.fetchEntries(credentials, collection)
         return fetchResult.fold(
             onSuccess = { hrefs ->
                 var successCount = 0
                 var failureCount = 0
                 val failures = mutableListOf<String>()
+                val conflicts = mutableListOf<SyncConflictInfo>()
 
                 for (href in hrefs) {
                     val fetchDataResult = calDavClient.fetchCalendarData(credentials, href)
@@ -203,24 +214,45 @@ class SyncRepository(
                             when (entry) {
                                 is JournalEntry -> {
                                     val existing = local.getJournalById(entry.id)
-                                    if (existing == null || existing.updated < entry.updated) {
+                                    if (existing == null) {
                                         local.insertJournal(entry)
+                                        successCount++
+                                    } else if (existing.updated < entry.updated) {
+                                        local.insertJournal(entry)
+                                        successCount++
+                                    } else if (existing.updated > entry.updated && existing.title != entry.title) {
+                                        conflicts.add(SyncConflictInfo(existing, entry, href, existing.updated, entry.updated))
+                                    } else {
+                                        successCount++
                                     }
-                                    successCount++
                                 }
                                 is NoteEntry -> {
                                     val existing = local.getNoteById(entry.id)
-                                    if (existing == null || existing.updated < entry.updated) {
+                                    if (existing == null) {
                                         local.insertNote(entry)
+                                        successCount++
+                                    } else if (existing.updated < entry.updated) {
+                                        local.insertNote(entry)
+                                        successCount++
+                                    } else if (existing.updated > entry.updated && existing.title != entry.title) {
+                                        conflicts.add(SyncConflictInfo(existing, entry, href, existing.updated, entry.updated))
+                                    } else {
+                                        successCount++
                                     }
-                                    successCount++
                                 }
                                 is TaskEntry -> {
                                     val existing = local.getTaskById(entry.id)
-                                    if (existing == null || existing.updated < entry.updated) {
+                                    if (existing == null) {
                                         local.insertTask(entry)
+                                        successCount++
+                                    } else if (existing.updated < entry.updated) {
+                                        local.insertTask(entry)
+                                        successCount++
+                                    } else if (existing.updated > entry.updated && existing.title != entry.title) {
+                                        conflicts.add(SyncConflictInfo(existing, entry, href, existing.updated, entry.updated))
+                                    } else {
+                                        successCount++
                                     }
-                                    successCount++
                                 }
                                 else -> {}
                             }
@@ -231,13 +263,8 @@ class SyncRepository(
                         }
                     )
                 }
-                val settings = local.getSettings()
                 local.saveSettings(settings.copy(lastSyncTime = System.currentTimeMillis()))
-                if (failureCount > 0) {
-                    Result.success(SyncResult(successCount, failureCount, failures))
-                } else {
-                    Result.success(SyncResult(successCount, failureCount, emptyList()))
-                }
+                Result.success(SyncResult(successCount, failureCount, failures, conflicts))
             },
             onFailure = { Result.failure(it) }
         )
@@ -267,6 +294,27 @@ class SyncRepository(
 
     suspend fun getSettings(): AppSettings = local.getSettings()
     suspend fun saveSettings(settings: AppSettings) = local.saveSettings(settings)
+
+    suspend fun resolveConflict(
+        credentials: CalDavCredentials,
+        collection: String,
+        conflict: SyncConflictInfo,
+        resolution: ConflictResolution
+    ) {
+        when (resolution) {
+            ConflictResolution.KEEP_LOCAL -> {
+            }
+            ConflictResolution.KEEP_SERVER -> {
+            }
+            ConflictResolution.KEEP_BOTH -> {
+                conflict.localEntry
+            }
+        }
+    }
+}
+
+enum class ConflictResolution {
+    KEEP_LOCAL, KEEP_SERVER, KEEP_BOTH
 }
 
 class TemplateRepository(private val local: LocalDataSource) {
