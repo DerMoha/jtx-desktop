@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -158,6 +159,7 @@ fun JtxApp(
     var searchFocusRequest by remember { mutableStateOf(0) }
     var showGlobalSearch by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
+    var showShortcutsDialog by remember { mutableStateOf(false) }
     var syncConflicts by remember { mutableStateOf<List<SyncRepository.SyncConflictInfo>>(emptyList()) }
     var syncIssues by remember { mutableStateOf<List<ObjectSyncMetadata>>(emptyList()) }
     var showSyncIssues by remember { mutableStateOf(false) }
@@ -573,10 +575,13 @@ fun JtxApp(
                 searchFocusRequest++
                 return true
             }
+            isCtrlOrMeta && isShift && !isAlt && keyCode == AWTKeyEvent.VK_SLASH -> { showShortcutsDialog = true; return true }
+            !isCtrlOrMeta && !isShift && !isAlt && keyCode == AWTKeyEvent.VK_F1 -> { showShortcutsDialog = true; return true }
             isCtrlOrMeta && !isShift && !isAlt && keyCode == AWTKeyEvent.VK_COMMA -> { selectedTab = Tab.Settings; return true }
             keyCode == AWTKeyEvent.VK_ESCAPE -> {
                 showNewDialog = false
                 showQuickEntryDialog = false
+                showShortcutsDialog = false
                 searchFocused = false
                 focusManager.clearFocus()
                 return true
@@ -843,6 +848,9 @@ fun JtxApp(
                         IconButton(onClick = { showGlobalSearch = true }) {
                             Icon(Icons.Default.Search, contentDescription = "Global search", tint = MaterialTheme.colorScheme.onPrimary)
                         }
+                        IconButton(onClick = { showShortcutsDialog = true }) {
+                            Icon(Icons.Default.Help, contentDescription = "Keyboard shortcuts", tint = MaterialTheme.colorScheme.onPrimary)
+                        }
                         IconButton(onClick = { syncNow() }) {
                             Icon(syncStateIcon, contentDescription = "Sync", tint = MaterialTheme.colorScheme.onPrimary)
                         }
@@ -991,6 +999,10 @@ fun JtxApp(
                     showQuickEntryDialog = false
                 }
             )
+        }
+
+        if (showShortcutsDialog) {
+            KeyboardShortcutsDialog(onDismiss = { showShortcutsDialog = false })
         }
 
         if (showGlobalSearch) {
@@ -1401,6 +1413,46 @@ private fun GlobalSearchDialog(
                 TextButton(onClick = onDismiss) {
                     Text("Close")
                 }
+            }
+        }
+    )
+}
+
+@Composable
+private fun KeyboardShortcutsDialog(onDismiss: () -> Unit) {
+    val shortcuts = listOf(
+        "New entry" to "Cmd/Ctrl+N",
+        "Quick entry" to "Cmd/Ctrl+Shift+N",
+        "Sync now" to "Cmd/Ctrl+S",
+        "Focus current list search" to "Cmd/Ctrl+F",
+        "Open settings" to "Cmd/Ctrl+,",
+        "Show keyboard shortcuts" to "Cmd/Ctrl+Shift+? or F1",
+        "Close dialog or clear focus" to "Esc"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Keyboard Shortcuts") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                shortcuts.forEach { (action, shortcut) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(action, modifier = Modifier.weight(1f))
+                        Text(
+                            shortcut,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
             }
         }
     )
