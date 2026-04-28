@@ -88,8 +88,13 @@ data class CombinedEntry(
     val color: String?,
     val progress: Int?,
     val completed: Boolean?,
-    val archived: Boolean = false
+    val archived: Boolean = false,
+    val syncStatus: SyncStatus = SyncStatus.SYNCED
 )
+
+enum class SyncStatus {
+    SYNCED, PENDING, CONFLICT
+}
 
 @Serializable
 data class CalDavCredentials(
@@ -109,7 +114,9 @@ data class AppSettings(
     val windowX: Int? = null,
     val windowY: Int? = null,
     val windowWidth: Int? = null,
-    val windowHeight: Int? = null
+    val windowHeight: Int? = null,
+    val autoSyncIntervalMinutes: Int = 15,
+    val syncOnChange: Boolean = true
 )
 
 @Serializable

@@ -8,6 +8,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class JournalRepository(private val local: LocalDataSource) {
+    private var onDataChange: (() -> Unit)? = null
+
+    fun setOnDataChangeListener(listener: () -> Unit) {
+        onDataChange = listener
+    }
+
     fun getAll(): Flow<List<JournalEntry>> = local.getAllJournals()
     fun getAllCombined(): Flow<List<CombinedEntry>> = local.getAllJournals().map { journals ->
         journals.map { journal ->
@@ -21,13 +27,20 @@ class JournalRepository(private val local: LocalDataSource) {
                 color = journal.color,
                 progress = null,
                 completed = null,
-                archived = journal.archived
+                archived = journal.archived,
+                syncStatus = SyncStatus.SYNCED
             )
         }
     }
     suspend fun getById(id: String): JournalEntry? = local.getJournalById(id)
-    suspend fun insert(entry: JournalEntry) = local.insertJournal(entry)
-    suspend fun update(entry: JournalEntry) = local.updateJournal(entry)
+    suspend fun insert(entry: JournalEntry) {
+        local.insertJournal(entry)
+        onDataChange?.invoke()
+    }
+    suspend fun update(entry: JournalEntry) {
+        local.updateJournal(entry)
+        onDataChange?.invoke()
+    }
     suspend fun updateJournal(combined: CombinedEntry) {
         val existing = local.getJournalById(combined.id) ?: return
         local.updateJournal(existing.copy(
@@ -35,11 +48,21 @@ class JournalRepository(private val local: LocalDataSource) {
             description = combined.description,
             archived = combined.archived
         ))
+        onDataChange?.invoke()
     }
-    suspend fun delete(id: String) = local.deleteJournal(id)
+    suspend fun delete(id: String) {
+        local.deleteJournal(id)
+        onDataChange?.invoke()
+    }
 }
 
 class NoteRepository(private val local: LocalDataSource) {
+    private var onDataChange: (() -> Unit)? = null
+
+    fun setOnDataChangeListener(listener: () -> Unit) {
+        onDataChange = listener
+    }
+
     fun getAll(): Flow<List<NoteEntry>> = local.getAllNotes()
     fun getAllCombined(): Flow<List<CombinedEntry>> = local.getAllNotes().map { notes ->
         notes.map { note ->
@@ -53,13 +76,20 @@ class NoteRepository(private val local: LocalDataSource) {
                 color = note.color,
                 progress = null,
                 completed = null,
-                archived = note.archived
+                archived = note.archived,
+                syncStatus = SyncStatus.SYNCED
             )
         }
     }
     suspend fun getById(id: String): NoteEntry? = local.getNoteById(id)
-    suspend fun insert(entry: NoteEntry) = local.insertNote(entry)
-    suspend fun update(entry: NoteEntry) = local.updateNote(entry)
+    suspend fun insert(entry: NoteEntry) {
+        local.insertNote(entry)
+        onDataChange?.invoke()
+    }
+    suspend fun update(entry: NoteEntry) {
+        local.updateNote(entry)
+        onDataChange?.invoke()
+    }
     suspend fun updateNote(combined: CombinedEntry) {
         val existing = local.getNoteById(combined.id) ?: return
         local.updateNote(existing.copy(
@@ -67,11 +97,21 @@ class NoteRepository(private val local: LocalDataSource) {
             description = combined.description,
             archived = combined.archived
         ))
+        onDataChange?.invoke()
     }
-    suspend fun delete(id: String) = local.deleteNote(id)
+    suspend fun delete(id: String) {
+        local.deleteNote(id)
+        onDataChange?.invoke()
+    }
 }
 
 class TaskRepository(private val local: LocalDataSource) {
+    private var onDataChange: (() -> Unit)? = null
+
+    fun setOnDataChangeListener(listener: () -> Unit) {
+        onDataChange = listener
+    }
+
     fun getAll(): Flow<List<TaskEntry>> = local.getAllTasks()
     fun getAllCombined(): Flow<List<CombinedEntry>> = local.getAllTasks().map { tasks ->
         tasks.map { task ->
@@ -85,13 +125,20 @@ class TaskRepository(private val local: LocalDataSource) {
                 color = task.color,
                 progress = task.progress,
                 completed = task.completed,
-                archived = task.archived
+                archived = task.archived,
+                syncStatus = SyncStatus.SYNCED
             )
         }
     }
     suspend fun getById(id: String): TaskEntry? = local.getTaskById(id)
-    suspend fun insert(entry: TaskEntry) = local.insertTask(entry)
-    suspend fun update(entry: TaskEntry) = local.updateTask(entry)
+    suspend fun insert(entry: TaskEntry) {
+        local.insertTask(entry)
+        onDataChange?.invoke()
+    }
+    suspend fun update(entry: TaskEntry) {
+        local.updateTask(entry)
+        onDataChange?.invoke()
+    }
     suspend fun updateTask(combined: CombinedEntry) {
         val existing = local.getTaskById(combined.id) ?: return
         local.updateTask(existing.copy(
@@ -101,10 +148,12 @@ class TaskRepository(private val local: LocalDataSource) {
             completed = combined.completed ?: false,
             archived = combined.archived
         ))
+        onDataChange?.invoke()
     }
     suspend fun updateTaskCompleted(id: String, completed: Boolean) {
         val existing = local.getTaskById(id) ?: return
         local.updateTask(existing.copy(completed = completed))
+        onDataChange?.invoke()
     }
     suspend fun updateTaskProgress(id: String, progress: Int) {
         val existing = local.getTaskById(id) ?: return
@@ -112,8 +161,12 @@ class TaskRepository(private val local: LocalDataSource) {
             progress = progress,
             completed = progress >= 100
         ))
+        onDataChange?.invoke()
     }
-    suspend fun delete(id: String) = local.deleteTask(id)
+    suspend fun delete(id: String) {
+        local.deleteTask(id)
+        onDataChange?.invoke()
+    }
 }
 
 class SyncRepository(

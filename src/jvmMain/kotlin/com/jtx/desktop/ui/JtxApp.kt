@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import com.jtx.desktop.ui.desktop.ShortcutManager
 import com.jtx.desktop.ui.desktop.TrayManager
 import com.jtx.desktop.ui.desktop.TrayStatus
+import com.jtx.desktop.ui.desktop.SyncScheduler
+import com.jtx.desktop.ui.desktop.NetworkMonitor
 import com.jtx.desktop.ui.theme.JtxBoardTheme
 import com.jtx.desktop.ui.screens.journals.JournalsScreen
 import com.jtx.desktop.ui.screens.notes.NotesScreen
@@ -143,6 +145,56 @@ fun JtxApp(
                 SortField.DATE -> if (it.sortPreference.ascending) SortOrder.DATE_ASC else SortOrder.DATE_DESC
                 SortField.TITLE -> if (it.sortPreference.ascending) SortOrder.TITLE_ASC else SortOrder.TITLE_DESC
                 SortField.MODIFIED -> if (it.sortPreference.ascending) SortOrder.MODIFIED_ASC else SortOrder.MODIFIED_DESC
+            }
+            isOffline = !NetworkMonitor.isNetworkAvailable()
+        }
+
+        if (settings?.syncOnChange == true) {
+            journalRepository.setOnDataChangeListener {
+                SyncScheduler.triggerSync(scope, 5000) {
+                    settings?.credentials?.let { cred ->
+                        settings?.collection?.let { col ->
+                            syncState = SyncState.SYNCING
+                            val result = syncRepository.sync(cred, col)
+                            syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
+                        }
+                    }
+                }
+            }
+            noteRepository.setOnDataChangeListener {
+                SyncScheduler.triggerSync(scope, 5000) {
+                    settings?.credentials?.let { cred ->
+                        settings?.collection?.let { col ->
+                            syncState = SyncState.SYNCING
+                            val result = syncRepository.sync(cred, col)
+                            syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
+                        }
+                    }
+                }
+            }
+            taskRepository.setOnDataChangeListener {
+                SyncScheduler.triggerSync(scope, 5000) {
+                    settings?.credentials?.let { cred ->
+                        settings?.collection?.let { col ->
+                            syncState = SyncState.SYNCING
+                            val result = syncRepository.sync(cred, col)
+                            syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
+                        }
+                    }
+                }
+            }
+        }
+
+        val interval = settings?.autoSyncIntervalMinutes ?: 15
+        if (interval > 0) {
+            SyncScheduler.schedulePeriodicSync(scope, interval) {
+                settings?.credentials?.let { cred ->
+                    settings?.collection?.let { col ->
+                        syncState = SyncState.SYNCING
+                        val result = syncRepository.sync(cred, col)
+                        syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
+                    }
+                }
             }
         }
     }
