@@ -47,6 +47,49 @@ class CalDavClient {
         }
     }
 
+    suspend fun discoverCollections(credentials: CalDavCredentials): Result<List<CalDavCollection>> = withContext(Dispatchers.IO) {
+        retryWithBackoff(maxRetries) {
+            val principalXml = propfind(
+                credentials = credentials,
+                href = credentials.serverUrl,
+                depth = "0",
+                body = """<?xml version="1.0" encoding="utf-8"?>
+                    <d:propfind xmlns:d="DAV:">
+                        <d:prop><d:current-user-principal/></d:prop>
+                    </d:propfind>"""
+            )
+            val principalHref = firstHrefInElement(principalXml, "current-user-principal") ?: credentials.serverUrl
+            val homeSetXml = propfind(
+                credentials = credentials,
+                href = principalHref,
+                depth = "0",
+                body = """<?xml version="1.0" encoding="utf-8"?>
+                    <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+                        <d:prop><c:calendar-home-set/></d:prop>
+                    </d:propfind>"""
+            )
+            val calendarHomeHref = firstHrefInElement(homeSetXml, "calendar-home-set") ?: principalHref
+            val collectionsXml = propfind(
+                credentials = credentials,
+                href = calendarHomeHref,
+                depth = "1",
+                body = """<?xml version="1.0" encoding="utf-8"?>
+                    <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/">
+                        <d:prop>
+                            <d:displayname/>
+                            <d:resourcetype/>
+                            <d:current-user-privilege-set/>
+                            <c:supported-calendar-component-set/>
+                            <cs:getctag/>
+                            <cs:calendar-color/>
+                            <d:sync-token/>
+                        </d:prop>
+                    </d:propfind>"""
+            )
+            Result.success(parseCollections(collectionsXml))
+        }
+    }
+
     suspend fun fetchCalendarData(credentials: CalDavCredentials, href: String): Result<String> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
             val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$href").toString())
@@ -130,12 +173,92 @@ class CalDavClient {
         conn.setRequestProperty("Authorization", "Basic $encoded")
     }
 
+    private fun propfind(credentials: CalDavCredentials, href: String, depth: String, body: String): String {
+        val url = resolveUrl(credentials, href)
+        val conn = url.openConnection() as HttpsURLConnection
+        conn.connectTimeout = connectTimeout
+        conn.readTimeout = readTimeout
+        conn.requestMethod = "PROPFIND"
+        conn.setRequestProperty("Content-Type", "application/xml; charset=utf-8")
+        conn.setRequestProperty("Depth", depth)
+        setAuth(conn, credentials)
+        conn.doOutput = true
+        conn.outputStream.write(body.toByteArray())
+
+        val responseCode = conn.responseCode
+        if (responseCode != 207) {
+            throw Exception("HTTP $responseCode: ${conn.responseMessage}")
+        }
+        return conn.inputStream.bufferedReader().readText()
+    }
+
+    private fun resolveUrl(credentials: CalDavCredentials, href: String): URL {
+        if (href.startsWith("http://", ignoreCase = true) || href.startsWith("https://", ignoreCase = true)) {
+            return URL(URI(href).toString())
+        }
+        val base = URI(credentials.serverUrl.trimEnd('/') + "/")
+        return URL(base.resolve(href).toString())
+    }
+
     private fun parseHrefs(xml: String): List<String> {
         val hrefs = mutableListOf<String>()
         val regex = Regex("<d:href>([^<]+)</d:href>")
         regex.findAll(xml).forEach { hrefs.add(it.groupValues[1]) }
         return hrefs
     }
+
+    private fun firstHrefInElement(xml: String, element: String): String? {
+        val block = elementBlock(xml, element) ?: return null
+        return elementText(block, "href")
+    }
+
+    private fun parseCollections(xml: String): List<CalDavCollection> {
+        return responseBlocks(xml).mapNotNull { response ->
+            if (!response.contains(Regex("<(?:\\w+:)?calendar[\\s>/]", RegexOption.IGNORE_CASE))) return@mapNotNull null
+            val href = elementText(response, "href") ?: return@mapNotNull null
+            val components = parseSupportedComponents(response)
+            CalDavCollection(
+                url = href,
+                displayName = elementText(response, "displayname") ?: href.trim('/').substringAfterLast('/'),
+                color = elementText(response, "calendar-color"),
+                supportedComponents = components,
+                readOnly = !response.contains(Regex("<(?:\\w+:)?write[\\s>/]", RegexOption.IGNORE_CASE)),
+                syncToken = elementText(response, "sync-token"),
+                ctag = elementText(response, "getctag"),
+                lastSync = null
+            )
+        }
+    }
+
+    private fun parseSupportedComponents(response: String): List<EntryType> {
+        val names = Regex("<(?:\\w+:)?comp[^>]*name=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
+            .findAll(response)
+            .map { it.groupValues[1].uppercase() }
+            .toSet()
+        val components = mutableSetOf<EntryType>()
+        if ("VTODO" in names) components.add(EntryType.TASK)
+        if ("VJOURNAL" in names) {
+            components.add(EntryType.JOURNAL)
+            components.add(EntryType.NOTE)
+        }
+        if ("VNOTE" in names) components.add(EntryType.NOTE)
+        return components.toList()
+    }
+
+    private fun responseBlocks(xml: String): List<String> = Regex(
+        "<(?:\\w+:)?response\\b[^>]*>(.*?)</(?:\\w+:)?response>",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    ).findAll(xml).map { it.value }.toList()
+
+    private fun elementBlock(xml: String, element: String): String? = Regex(
+        "<(?:\\w+:)?${Regex.escape(element)}\\b[^>]*>(.*?)</(?:\\w+:)?${Regex.escape(element)}>",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    ).find(xml)?.value
+
+    private fun elementText(xml: String, element: String): String? = elementBlock(xml, element)
+        ?.replace(Regex("<[^>]+>"), "")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
 }
 
 class ICalendarParser {
