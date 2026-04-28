@@ -3,6 +3,8 @@ package com.jtx.desktop.ui.screens.journals
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -12,8 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jtx.desktop.data.repository.JournalRepository
-import com.jtx.desktop.domain.model.CombinedEntry
-import com.jtx.desktop.domain.model.EntryType
+import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
 import com.jtx.desktop.ui.components.EntryCard
 import com.jtx.desktop.ui.components.SearchBar
@@ -270,12 +271,26 @@ fun JournalEditDialog(
 ) {
     var title by remember { mutableStateOf(entry.title) }
     var description by remember { mutableStateOf(entry.description) }
+    var descriptionFormat by remember { mutableStateOf(entry.descriptionFormat) }
+    var startDate by remember { mutableStateOf(entry.date?.toString().orEmpty()) }
+    var endDate by remember { mutableStateOf(entry.endDate?.toString().orEmpty()) }
+    var categories by remember { mutableStateOf(entry.categories.joinToString(", ")) }
+    var color by remember { mutableStateOf(entry.color.orEmpty()) }
+    var location by remember { mutableStateOf(entry.location.orEmpty()) }
+    var comments by remember { mutableStateOf(entry.comments.joinToString("\n") { it.text }) }
+    var attachments by remember { mutableStateOf(entry.attachments.joinToString(", ") { it.uri }) }
+    var relatedEntries by remember { mutableStateOf(entry.relatedEntries.joinToString(", ")) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit Journal") },
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -292,11 +307,95 @@ fun JournalEditDialog(
                         .height(120.dp),
                     maxLines = 5
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = descriptionFormat == DescriptionFormat.PLAIN,
+                        onClick = { descriptionFormat = DescriptionFormat.PLAIN },
+                        label = { Text("Plain") }
+                    )
+                    FilterChip(
+                        selected = descriptionFormat == DescriptionFormat.MARKDOWN,
+                        onClick = { descriptionFormat = DescriptionFormat.MARKDOWN },
+                        label = { Text("Markdown") }
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = startDate,
+                    onValueChange = { startDate = it.filter(Char::isDigit) },
+                    label = { Text("Start timestamp") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = endDate,
+                    onValueChange = { endDate = it.filter(Char::isDigit) },
+                    label = { Text("End timestamp") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = categories,
+                    onValueChange = { categories = it },
+                    label = { Text("Categories") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = color,
+                    onValueChange = { color = it },
+                    label = { Text("Color") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = { Text("Location") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = comments,
+                    onValueChange = { comments = it },
+                    label = { Text("Comments (one per line)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = attachments,
+                    onValueChange = { attachments = it },
+                    label = { Text("Attachment URIs") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = relatedEntries,
+                    onValueChange = { relatedEntries = it },
+                    label = { Text("Related entry IDs") },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                onSave(entry.copy(title = title, description = description))
+                onSave(
+                    entry.copy(
+                        title = title,
+                        description = description,
+                        descriptionFormat = descriptionFormat,
+                        date = startDate.toLongOrNull(),
+                        endDate = endDate.toLongOrNull(),
+                        categories = categories.toCsvList(),
+                        color = color.ifBlank { null },
+                        location = location.ifBlank { null },
+                        comments = comments.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { EntryComment(it) },
+                        attachments = attachments.toCsvList().map { EntryAttachment(uri = it) },
+                        relatedEntries = relatedEntries.toCsvList()
+                    )
+                )
             }) {
                 Text("Save")
             }
@@ -308,6 +407,8 @@ fun JournalEditDialog(
         }
     )
 }
+
+private fun String.toCsvList(): List<String> = split(',').map { it.trim() }.filter { it.isNotEmpty() }
 
 private fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault())

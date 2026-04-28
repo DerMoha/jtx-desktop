@@ -32,7 +32,13 @@ class JournalRepository(private val local: LocalDataSource) {
                 progress = null,
                 completed = null,
                 archived = journal.archived,
-                syncStatus = SyncStatus.SYNCED
+                syncStatus = SyncStatus.SYNCED,
+                endDate = journal.dtend,
+                descriptionFormat = journal.descriptionFormat,
+                location = journal.location,
+                comments = journal.comments,
+                attachments = journal.attachments,
+                relatedEntries = journal.relatedEntries
             )
         }
     }
@@ -53,6 +59,15 @@ class JournalRepository(private val local: LocalDataSource) {
         val updatedEntry = existing.copy(
             title = combined.title,
             description = combined.description,
+            descriptionFormat = combined.descriptionFormat,
+            dtstart = combined.date,
+            dtend = combined.endDate,
+            categories = combined.categories,
+            color = combined.color,
+            location = combined.location,
+            comments = combined.comments,
+            relatedEntries = combined.relatedEntries,
+            attachments = combined.attachments,
             archived = combined.archived,
             updated = now
         )

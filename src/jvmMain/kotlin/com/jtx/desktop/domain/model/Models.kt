@@ -168,7 +168,13 @@ data class CombinedEntry(
     val progress: Int?,
     val completed: Boolean?,
     val archived: Boolean = false,
-    val syncStatus: SyncStatus = SyncStatus.SYNCED
+    val syncStatus: SyncStatus = SyncStatus.SYNCED,
+    val endDate: Long? = null,
+    val descriptionFormat: DescriptionFormat = DescriptionFormat.PLAIN,
+    val location: String? = null,
+    val comments: List<EntryComment> = emptyList(),
+    val attachments: List<EntryAttachment> = emptyList(),
+    val relatedEntries: List<String> = emptyList()
 )
 
 enum class SyncStatus {
