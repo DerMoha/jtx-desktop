@@ -18,6 +18,7 @@ import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
 import com.jtx.desktop.ui.components.AttachmentsSection
+import com.jtx.desktop.ui.components.CategoryChips
 import com.jtx.desktop.ui.components.EntryCard
 import com.jtx.desktop.ui.components.MarkdownText
 import com.jtx.desktop.ui.components.RelatedEntriesSection
@@ -414,6 +415,10 @@ fun TaskDetailDialog(
                     style = MaterialTheme.typography.labelMedium,
                     color = if (entry.completed == true) androidx.compose.ui.graphics.Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (entry.categories.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CategoryChips(entry.categories)
+                }
                 if (entry.subtasks.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(

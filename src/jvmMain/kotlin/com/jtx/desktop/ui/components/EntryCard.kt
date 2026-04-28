@@ -73,6 +73,10 @@ fun EntryCard(
                         color = MaterialTheme.colorScheme.outline
                     )
                 }
+                if (entry.categories.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    CategoryChips(entry.categories, limit = 3)
+                }
             }
             if (entry.type == EntryType.TASK) {
                 if (entry.completed == true) {

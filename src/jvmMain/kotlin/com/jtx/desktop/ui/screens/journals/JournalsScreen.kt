@@ -18,6 +18,7 @@ import com.jtx.desktop.data.repository.JournalRepository
 import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
 import com.jtx.desktop.ui.components.AttachmentsSection
+import com.jtx.desktop.ui.components.CategoryChips
 import com.jtx.desktop.ui.components.EntryCard
 import com.jtx.desktop.ui.components.MarkdownText
 import com.jtx.desktop.ui.components.RelatedEntriesSection
@@ -254,11 +255,7 @@ fun JournalDetailDialog(
                     )
                 }
                 if (entry.categories.isNotEmpty()) {
-                    Text(
-                        "Categories: ${entry.categories.joinToString(", ")}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    CategoryChips(entry.categories)
                 }
                 if (entry.attachments.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
