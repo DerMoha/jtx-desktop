@@ -45,6 +45,7 @@ fun TasksScreen(
     onOpenEntryRequestHandled: () -> Unit = {},
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
+    listDensity: ListDensity = ListDensity.COMFORTABLE,
     searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
@@ -245,6 +246,7 @@ fun TasksScreen(
                     }
                     EntryCard(
                         entry = task,
+                        density = listDensity,
                         onClick = {
                             if (isMultiSelectMode) {
                                 selectedTasks = if (selectedTasks.contains(task.id)) {

@@ -17,6 +17,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jtx.desktop.domain.model.CombinedEntry
 import com.jtx.desktop.domain.model.EntryType
+import com.jtx.desktop.domain.model.ListDensity
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -24,12 +25,19 @@ import java.util.*
 fun EntryCard(
     entry: CombinedEntry,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    density: ListDensity = ListDensity.COMFORTABLE
 ) {
+    val horizontalPadding = if (density == ListDensity.COMPACT) 12.dp else 16.dp
+    val verticalPadding = if (density == ListDensity.COMPACT) 2.dp else 4.dp
+    val contentPadding = if (density == ListDensity.COMPACT) 8.dp else 12.dp
+    val descriptionLines = if (density == ListDensity.COMPACT) 1 else 2
+    val categoryLimit = if (density == ListDensity.COMPACT) 2 else 3
+
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -39,7 +47,7 @@ fun EntryCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(contentPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
             val indicatorColor = when (entry.type) {
@@ -62,7 +70,7 @@ fun EntryCard(
                         text = entry.description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        maxLines = descriptionLines,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -75,7 +83,7 @@ fun EntryCard(
                 }
                 if (entry.categories.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
-                    CategoryChips(entry.categories, limit = 3)
+                    CategoryChips(entry.categories, limit = categoryLimit)
                 }
             }
             if (entry.type == EntryType.TASK) {

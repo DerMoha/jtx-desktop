@@ -249,7 +249,8 @@ data class AppSettings(
     val syncNotes: Boolean = true,
     val syncTasks: Boolean = true,
     val pendingSyncCount: Int = 0,
-    val savedFilters: List<SavedFilter> = emptyList()
+    val savedFilters: List<SavedFilter> = emptyList(),
+    val listDensity: ListDensity = ListDensity.COMFORTABLE
 )
 
 @Serializable
@@ -266,6 +267,11 @@ enum class SortField {
 @Serializable
 enum class DarkModePreference {
     LIGHT, DARK, SYSTEM
+}
+
+@Serializable
+enum class ListDensity {
+    COMPACT, COMFORTABLE
 }
 
 @Serializable

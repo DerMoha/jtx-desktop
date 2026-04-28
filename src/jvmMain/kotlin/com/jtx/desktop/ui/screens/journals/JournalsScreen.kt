@@ -41,6 +41,7 @@ fun JournalsScreen(
     onOpenEntryRequestHandled: () -> Unit = {},
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
+    listDensity: ListDensity = ListDensity.COMFORTABLE,
     searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
@@ -150,6 +151,7 @@ fun JournalsScreen(
             items(filteredJournals, key = { it.id }) { journal ->
                 EntryCard(
                     entry = journal,
+                    density = listDensity,
                     onClick = { selectedEntry = journal }
                 )
             }

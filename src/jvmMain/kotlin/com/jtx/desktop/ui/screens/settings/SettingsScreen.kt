@@ -31,6 +31,8 @@ fun SettingsScreen(
     onSync: () -> Unit,
     darkModePreference: DarkModePreference = DarkModePreference.SYSTEM,
     onDarkModeChange: (DarkModePreference) -> Unit = {},
+    listDensity: ListDensity = ListDensity.COMFORTABLE,
+    onListDensityChange: (ListDensity) -> Unit = {},
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     onSortChange: (SortOrder) -> Unit = {}
 ) {
@@ -117,6 +119,27 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+        }
+
+        Text("List Density", style = MaterialTheme.typography.labelLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ListDensity.entries.forEach { density ->
+                FilterChip(
+                    selected = listDensity == density,
+                    onClick = { onListDensityChange(density) },
+                    label = {
+                        Text(
+                            when (density) {
+                                ListDensity.COMPACT -> "Compact"
+                                ListDensity.COMFORTABLE -> "Comfortable"
+                            }
+                        )
+                    }
+                )
             }
         }
 
@@ -275,6 +298,7 @@ fun SettingsScreen(
                                     SortOrder.MODIFIED_DESC -> SortPreference(SortField.MODIFIED, false)
                                     SortOrder.MODIFIED_ASC -> SortPreference(SortField.MODIFIED, true)
                                 },
+                                listDensity = listDensity,
                                 kanbanColumns = kanbanColumns.normalizedKanbanColumns()
                             )
                         )

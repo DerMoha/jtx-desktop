@@ -142,6 +142,7 @@ fun JtxApp(
     var refreshTrigger by remember { mutableStateOf(0) }
     var syncState by remember { mutableStateOf(SyncState.IDLE) }
     var darkModePreference by remember { mutableStateOf(DarkModePreference.SYSTEM) }
+    var listDensity by remember { mutableStateOf(ListDensity.COMFORTABLE) }
     var sortOrder by remember { mutableStateOf(SortOrder.DATE_DESC) }
     var showArchived by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
@@ -539,6 +540,7 @@ fun JtxApp(
         settings = syncRepository.getSettings()
         settings?.let {
             darkModePreference = it.darkModePreference
+            listDensity = it.listDensity
             sortOrder = when (it.sortPreference.field) {
                 SortField.DATE -> if (it.sortPreference.ascending) SortOrder.DATE_ASC else SortOrder.DATE_DESC
                 SortField.TITLE -> if (it.sortPreference.ascending) SortOrder.TITLE_ASC else SortOrder.TITLE_DESC
@@ -775,6 +777,7 @@ fun JtxApp(
                         onOpenEntryRequestHandled = { entryToOpen = null },
                         sortOrder = sortOrder,
                         showArchived = showArchived,
+                        listDensity = listDensity,
                         searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
@@ -792,6 +795,7 @@ fun JtxApp(
                         onOpenEntryRequestHandled = { entryToOpen = null },
                         sortOrder = sortOrder,
                         showArchived = showArchived,
+                        listDensity = listDensity,
                         searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
@@ -809,6 +813,7 @@ fun JtxApp(
                         onOpenEntryRequestHandled = { entryToOpen = null },
                         sortOrder = sortOrder,
                         showArchived = showArchived,
+                        listDensity = listDensity,
                         searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
@@ -832,6 +837,8 @@ fun JtxApp(
                         onSync = { refreshTrigger++ },
                         darkModePreference = darkModePreference,
                         onDarkModeChange = { darkModePreference = it },
+                        listDensity = listDensity,
+                        onListDensityChange = { listDensity = it },
                         onSortChange = { sortOrder = it },
                         sortOrder = sortOrder
                     )
