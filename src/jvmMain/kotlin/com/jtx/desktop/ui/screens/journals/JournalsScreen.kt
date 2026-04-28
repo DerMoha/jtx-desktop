@@ -345,6 +345,7 @@ fun JournalEditDialog(
                     value = categories,
                     onValueChange = { categories = it },
                     label = { Text("Categories") },
+                    supportingText = { Text("Comma or line separated") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -394,7 +395,7 @@ fun JournalEditDialog(
                         descriptionFormat = descriptionFormat,
                         date = startDate.parseDateTimeInput(),
                         endDate = endDate.parseDateTimeInput(),
-                        categories = categories.toCsvList(),
+                        categories = categories.toTokenList(),
                         color = color.ifBlank { null },
                         location = location.ifBlank { null },
                         comments = comments.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { EntryComment(it) },
@@ -415,6 +416,8 @@ fun JournalEditDialog(
 }
 
 private fun String.toCsvList(): List<String> = split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+private fun String.toTokenList(): List<String> = split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
 
 private fun Long.toDateTimeInput(): String = Instant.ofEpochMilli(this)
     .atZone(ZoneId.systemDefault())

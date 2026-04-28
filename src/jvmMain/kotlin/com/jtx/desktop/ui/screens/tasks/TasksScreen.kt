@@ -599,6 +599,7 @@ fun TaskEditDialog(
                     value = categories,
                     onValueChange = { categories = it },
                     label = { Text("Categories") },
+                    supportingText = { Text("Comma or line separated") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -669,7 +670,7 @@ fun TaskEditDialog(
                             )
                         } else null,
                         reminders = reminders.toReminders(),
-                        categories = categories.toCsvList(),
+                        categories = categories.toTokenList(),
                         color = color.ifBlank { null },
                         location = location.ifBlank { null },
                         subtasks = subtasks.toSubtasks(entry.subtasks),
@@ -691,6 +692,8 @@ fun TaskEditDialog(
 }
 
 private fun String.toCsvList(): List<String> = split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+private fun String.toTokenList(): List<String> = split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
 
 private fun String.toReminders(): List<Reminder> = lines()
     .flatMap { it.split(',') }

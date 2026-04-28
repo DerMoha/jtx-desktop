@@ -314,6 +314,7 @@ fun NoteEditDialog(
                     value = categories,
                     onValueChange = { categories = it },
                     label = { Text("Categories") },
+                    supportingText = { Text("Comma or line separated") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -361,7 +362,7 @@ fun NoteEditDialog(
                         title = title,
                         description = description,
                         descriptionFormat = descriptionFormat,
-                        categories = categories.toCsvList(),
+                        categories = categories.toTokenList(),
                         color = color.ifBlank { null },
                         location = location.ifBlank { null },
                         comments = comments.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { EntryComment(it) },
@@ -382,3 +383,5 @@ fun NoteEditDialog(
 }
 
 private fun String.toCsvList(): List<String> = split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+private fun String.toTokenList(): List<String> = split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
