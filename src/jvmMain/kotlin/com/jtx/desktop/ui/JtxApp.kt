@@ -1,5 +1,6 @@
 package com.jtx.desktop.ui
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -12,11 +13,15 @@ import androidx.compose.material.icons.filled.CheckCircle as CheckCircleIcon
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
-import com.jtx.desktop.ui.desktop.ShortcutManager
 import com.jtx.desktop.ui.desktop.TrayManager
 import com.jtx.desktop.ui.desktop.TrayStatus
 import com.jtx.desktop.ui.desktop.SyncScheduler
@@ -124,7 +129,10 @@ fun JtxApp(
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     var isOffline by remember { mutableStateOf(false) }
     var searchFocused by remember { mutableStateOf(focusSearch) }
+    var searchFocusRequest by remember { mutableStateOf(0) }
     var showAboutDialog by remember { mutableStateOf(false) }
+    val rootFocusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
 
     val undoManager = remember { UndoManager<UndoAction>() }
     val scope = rememberCoroutineScope()
@@ -337,35 +345,38 @@ fun JtxApp(
     }
 
     fun handleKeyboardShortcut(event: KeyEvent): Boolean {
+        if (event.type != KeyEventType.KeyDown) return false
         val awtEvent = event.nativeKeyEvent
         if (awtEvent !is AWTKeyEvent) return false
         val keyCode = awtEvent.keyCode
         val modifiers = awtEvent.modifiers
-        val isCtrl = (modifiers and AWTKeyEvent.CTRL_MASK) != 0
+        val isCtrlOrMeta = (modifiers and AWTKeyEvent.CTRL_MASK) != 0 || (modifiers and AWTKeyEvent.META_MASK) != 0
         val isShift = (modifiers and AWTKeyEvent.SHIFT_MASK) != 0
         val isAlt = (modifiers and AWTKeyEvent.ALT_MASK) != 0
         when {
-            isCtrl && keyCode == AWTKeyEvent.VK_N -> { showNewDialog = true; return true }
-            isCtrl && keyCode == AWTKeyEvent.VK_S -> {
-                scope.launch {
-                    syncState = SyncState.SYNCING
-                    val result = syncRepository.sync(
-                        settings?.credentials ?: return@launch,
-                        settings?.collection ?: return@launch
-                    )
-                    syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
-                }
+            isCtrlOrMeta && !isShift && !isAlt && keyCode == AWTKeyEvent.VK_N -> { showNewDialog = true; return true }
+            isCtrlOrMeta && !isShift && !isAlt && keyCode == AWTKeyEvent.VK_S -> {
+                syncNow()
                 return true
             }
-            isCtrl && keyCode == AWTKeyEvent.VK_F -> { searchFocused = true; return true }
-            isCtrl && keyCode == AWTKeyEvent.VK_COMMA -> { selectedTab = Tab.Settings; return true }
+            isCtrlOrMeta && !isShift && !isAlt && keyCode == AWTKeyEvent.VK_F -> {
+                searchFocused = true
+                searchFocusRequest++
+                return true
+            }
+            isCtrlOrMeta && !isShift && !isAlt && keyCode == AWTKeyEvent.VK_COMMA -> { selectedTab = Tab.Settings; return true }
             keyCode == AWTKeyEvent.VK_ESCAPE -> {
                 showNewDialog = false
                 searchFocused = false
+                focusManager.clearFocus()
                 return true
             }
         }
         return false
+    }
+
+    LaunchedEffect(Unit) {
+        rootFocusRequester.requestFocus()
     }
 
     LaunchedEffect(Unit) {
@@ -477,6 +488,13 @@ fun JtxApp(
     }
 
     JtxBoardTheme(darkTheme = isDarkTheme) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(rootFocusRequester)
+                .focusable()
+                .onPreviewKeyEvent { handleKeyboardShortcut(it) }
+        ) {
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -551,6 +569,7 @@ fun JtxApp(
                         repository = journalRepository,
                         sortOrder = sortOrder,
                         showArchived = showArchived,
+                        searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
                         onDelete = { entry -> undoManager.push(UndoAction(UndoType.DELETE, entry)) },
@@ -560,6 +579,7 @@ fun JtxApp(
                         repository = noteRepository,
                         sortOrder = sortOrder,
                         showArchived = showArchived,
+                        searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
                         onDelete = { entry -> undoManager.push(UndoAction(UndoType.DELETE, entry)) },
@@ -569,6 +589,7 @@ fun JtxApp(
                         repository = taskRepository,
                         sortOrder = sortOrder,
                         showArchived = showArchived,
+                        searchFocusRequest = searchFocusRequest,
                         onSortChange = { sortOrder = it },
                         onShowArchivedChange = { showArchived = it },
                         onDelete = { entry -> undoManager.push(UndoAction(UndoType.DELETE, entry)) },
@@ -616,6 +637,7 @@ fun JtxApp(
                     }
                 }
             )
+        }
         }
     }
 }

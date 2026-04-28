@@ -23,6 +23,7 @@ fun NotesScreen(
     repository: NoteRepository,
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
+    searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
     onDelete: (CombinedEntry) -> Unit = {},
@@ -65,6 +66,7 @@ fun NotesScreen(
                 query = searchQuery,
                 onQueryChange = { searchQuery = it },
                 placeholder = "Search notes...",
+                focusRequest = searchFocusRequest,
                 modifier = Modifier.weight(1f)
             )
             Box {

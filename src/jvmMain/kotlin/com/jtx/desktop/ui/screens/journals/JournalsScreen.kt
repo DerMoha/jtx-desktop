@@ -25,6 +25,7 @@ fun JournalsScreen(
     repository: JournalRepository,
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
+    searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
     onDelete: (CombinedEntry) -> Unit = {},
@@ -67,6 +68,7 @@ fun JournalsScreen(
                 query = searchQuery,
                 onQueryChange = { searchQuery = it },
                 placeholder = "Search journals...",
+                focusRequest = searchFocusRequest,
                 modifier = Modifier.weight(1f)
             )
             Box {

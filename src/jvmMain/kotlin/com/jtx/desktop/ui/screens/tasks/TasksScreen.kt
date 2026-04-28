@@ -31,6 +31,7 @@ fun TasksScreen(
     repository: TaskRepository,
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
+    searchFocusRequest: Int = 0,
     onSortChange: (SortOrder) -> Unit = {},
     onShowArchivedChange: (Boolean) -> Unit = {},
     onDelete: (CombinedEntry) -> Unit = {},
@@ -82,6 +83,7 @@ fun TasksScreen(
                 query = searchQuery,
                 onQueryChange = { searchQuery = it },
                 placeholder = "Search tasks...",
+                focusRequest = searchFocusRequest,
                 modifier = Modifier.weight(1f)
             )
             IconButton(onClick = { showSortMenu = true }) {
