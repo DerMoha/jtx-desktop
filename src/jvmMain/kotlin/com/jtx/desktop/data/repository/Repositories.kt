@@ -303,19 +303,19 @@ class SyncRepository(
     }
 
     suspend fun uploadJournal(credentials: CalDavCredentials, entry: JournalEntry, collection: String): Result<String> {
-        val ics = parser.journalToIcs(entry)
+        val ics = parser.entryToIcs(entry)
         val href = "$collection/${entry.uid}.ics"
         return calDavClient.putEntry(credentials, href, ics)
     }
 
     suspend fun uploadNote(credentials: CalDavCredentials, entry: NoteEntry, collection: String): Result<String> {
-        val ics = parser.noteToIcs(entry)
+        val ics = parser.entryToIcs(entry)
         val href = "$collection/${entry.uid}.ics"
         return calDavClient.putEntry(credentials, href, ics)
     }
 
     suspend fun uploadTask(credentials: CalDavCredentials, entry: TaskEntry, collection: String): Result<String> {
-        val ics = parser.taskToIcs(entry)
+        val ics = parser.entryToIcs(entry)
         val href = "$collection/${entry.uid}.ics"
         return calDavClient.putEntry(credentials, href, ics)
     }

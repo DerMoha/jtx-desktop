@@ -366,9 +366,9 @@ fun JtxApp(
             val notes = noteRepository.getAll(includeArchived = true).first()
             val tasks = taskRepository.getAll(includeArchived = true).first()
             val content = buildString {
-                journals.forEach { appendLine(parser.journalToIcs(it)) }
-                notes.forEach { appendLine(parser.noteToIcs(it)) }
-                tasks.forEach { appendLine(parser.taskToIcs(it)) }
+                journals.forEach { append(parser.entryToIcs(it)) }
+                notes.forEach { append(parser.entryToIcs(it)) }
+                tasks.forEach { append(parser.entryToIcs(it)) }
             }
             withContext(Dispatchers.IO) { file.writeText(content) }
             snackbarMessage = "Exported ${journals.size + notes.size + tasks.size} entries"

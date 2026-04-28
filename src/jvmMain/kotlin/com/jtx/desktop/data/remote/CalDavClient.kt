@@ -383,10 +383,18 @@ class ICalendarParser {
         } catch (e: Exception) { null }
     }
 
+    fun entryToIcs(entry: Any): String = when (entry) {
+        is JournalEntry -> journalToIcs(entry)
+        is NoteEntry -> noteToIcs(entry)
+        is TaskEntry -> taskToIcs(entry)
+        else -> throw IllegalArgumentException("Unsupported iCalendar entry type: ${entry::class.simpleName}")
+    }
+
     fun journalToIcs(entry: JournalEntry): String {
         return buildString {
             appendLine("BEGIN:VCALENDAR")
             appendLine("VERSION:2.0")
+            appendLine("CALSCALE:GREGORIAN")
             appendLine("PRODID:-//jtxBoard Desktop//EN")
             appendLine("BEGIN:VJOURNAL")
             appendLine("UID:${entry.uid}")
@@ -407,13 +415,14 @@ class ICalendarParser {
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VJOURNAL")
             appendLine("END:VCALENDAR")
-        }
+        }.withIcsLineEndings()
     }
 
     fun taskToIcs(entry: TaskEntry): String {
         return buildString {
             appendLine("BEGIN:VCALENDAR")
             appendLine("VERSION:2.0")
+            appendLine("CALSCALE:GREGORIAN")
             appendLine("PRODID:-//jtxBoard Desktop//EN")
             appendLine("BEGIN:VTODO")
             appendLine("UID:${entry.uid}")
@@ -440,13 +449,14 @@ class ICalendarParser {
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VTODO")
             appendLine("END:VCALENDAR")
-        }
+        }.withIcsLineEndings()
     }
 
     fun noteToIcs(entry: NoteEntry): String {
         return buildString {
             appendLine("BEGIN:VCALENDAR")
             appendLine("VERSION:2.0")
+            appendLine("CALSCALE:GREGORIAN")
             appendLine("PRODID:-//jtxBoard Desktop//EN")
             appendLine("BEGIN:VNOTE")
             appendLine("UID:${entry.uid}")
@@ -464,8 +474,10 @@ class ICalendarParser {
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VNOTE")
             appendLine("END:VCALENDAR")
-        }
+        }.withIcsLineEndings()
     }
+
+    private fun String.withIcsLineEndings(): String = trimEnd().lines().joinToString("\r\n", postfix = "\r\n")
 
     private fun parseIcsDate(line: String): Long? {
         return try {
