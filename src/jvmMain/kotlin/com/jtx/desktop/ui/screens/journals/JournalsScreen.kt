@@ -18,7 +18,9 @@ import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
 import com.jtx.desktop.ui.components.EntryCard
 import com.jtx.desktop.ui.components.MarkdownText
+import com.jtx.desktop.ui.components.RelatedEntriesSection
 import com.jtx.desktop.ui.components.SearchBar
+import com.jtx.desktop.ui.components.relatedEntriesFor
 import java.awt.FileDialog
 import java.awt.Frame
 import java.time.Instant
@@ -31,6 +33,7 @@ import java.util.*
 @Composable
 fun JournalsScreen(
     repository: JournalRepository,
+    allEntries: List<CombinedEntry> = emptyList(),
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
     searchFocusRequest: Int = 0,
@@ -159,6 +162,7 @@ fun JournalsScreen(
     if (selectedEntry != null && !isEditing) {
         JournalDetailDialog(
             entry = selectedEntry!!,
+            relatedEntries = relatedEntriesFor(selectedEntry!!, allEntries),
             onDismiss = { selectedEntry = null },
             onEdit = { isEditing = true },
             onDelete = {
@@ -202,6 +206,7 @@ fun JournalsScreen(
 @Composable
 fun JournalDetailDialog(
     entry: CombinedEntry,
+    relatedEntries: List<CombinedEntry> = emptyList(),
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -232,6 +237,10 @@ fun JournalDetailDialog(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                if (relatedEntries.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    RelatedEntriesSection(relatedEntries)
                 }
                 if (entry.archived) {
                     Spacer(modifier = Modifier.height(8.dp))

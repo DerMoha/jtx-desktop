@@ -18,13 +18,16 @@ import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
 import com.jtx.desktop.ui.components.EntryCard
 import com.jtx.desktop.ui.components.MarkdownText
+import com.jtx.desktop.ui.components.RelatedEntriesSection
 import com.jtx.desktop.ui.components.SearchBar
+import com.jtx.desktop.ui.components.relatedEntriesFor
 import java.awt.FileDialog
 import java.awt.Frame
 
 @Composable
 fun NotesScreen(
     repository: NoteRepository,
+    allEntries: List<CombinedEntry> = emptyList(),
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
     searchFocusRequest: Int = 0,
@@ -153,6 +156,7 @@ fun NotesScreen(
     if (selectedNote != null && !isEditing) {
         NoteDetailDialog(
             entry = selectedNote!!,
+            relatedEntries = relatedEntriesFor(selectedNote!!, allEntries),
             onDismiss = { selectedNote = null },
             onEdit = { isEditing = true },
             onDelete = {
@@ -196,6 +200,7 @@ fun NotesScreen(
 @Composable
 fun NoteDetailDialog(
     entry: CombinedEntry,
+    relatedEntries: List<CombinedEntry> = emptyList(),
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -219,6 +224,10 @@ fun NoteDetailDialog(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                if (relatedEntries.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    RelatedEntriesSection(relatedEntries)
                 }
                 if (entry.archived) {
                     Spacer(modifier = Modifier.height(8.dp))

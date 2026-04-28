@@ -45,6 +45,7 @@ import java.io.File
 import java.awt.event.KeyEvent as AWTKeyEvent
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -137,6 +138,7 @@ fun JtxApp(
     var searchFocusRequest by remember { mutableStateOf(0) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var syncConflicts by remember { mutableStateOf<List<SyncRepository.SyncConflictInfo>>(emptyList()) }
+    var allEntries by remember { mutableStateOf<List<CombinedEntry>>(emptyList()) }
     val rootFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
@@ -144,6 +146,15 @@ fun JtxApp(
     val scope = rememberCoroutineScope()
 
     var settings by remember { mutableStateOf<AppSettings?>(null) }
+
+    LaunchedEffect(Unit) {
+        combine(
+            journalRepository.getAllCombined(includeArchived = true),
+            noteRepository.getAllCombined(includeArchived = true),
+            taskRepository.getAllCombined(includeArchived = true)
+        ) { journals, notes, tasks -> journals + notes + tasks }
+            .collect { allEntries = it }
+    }
 
     fun createNewEntry(
         type: EntryType,
@@ -709,6 +720,7 @@ fun JtxApp(
                 when (selectedTab) {
                     Tab.Journals -> JournalsScreen(
                         repository = journalRepository,
+                        allEntries = allEntries,
                         sortOrder = sortOrder,
                         showArchived = showArchived,
                         searchFocusRequest = searchFocusRequest,
@@ -719,6 +731,7 @@ fun JtxApp(
                     )
                     Tab.Notes -> NotesScreen(
                         repository = noteRepository,
+                        allEntries = allEntries,
                         sortOrder = sortOrder,
                         showArchived = showArchived,
                         searchFocusRequest = searchFocusRequest,
@@ -729,6 +742,7 @@ fun JtxApp(
                     )
                     Tab.Tasks -> TasksScreen(
                         repository = taskRepository,
+                        allEntries = allEntries,
                         sortOrder = sortOrder,
                         showArchived = showArchived,
                         searchFocusRequest = searchFocusRequest,

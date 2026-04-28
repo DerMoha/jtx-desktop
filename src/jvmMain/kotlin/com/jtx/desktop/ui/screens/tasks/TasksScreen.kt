@@ -18,7 +18,9 @@ import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
 import com.jtx.desktop.ui.components.EntryCard
 import com.jtx.desktop.ui.components.MarkdownText
+import com.jtx.desktop.ui.components.RelatedEntriesSection
 import com.jtx.desktop.ui.components.SearchBar
+import com.jtx.desktop.ui.components.relatedEntriesFor
 import java.awt.FileDialog
 import java.awt.Frame
 import java.time.Instant
@@ -35,6 +37,7 @@ enum class TaskFilter {
 @Composable
 fun TasksScreen(
     repository: TaskRepository,
+    allEntries: List<CombinedEntry> = emptyList(),
     sortOrder: SortOrder = SortOrder.DATE_DESC,
     showArchived: Boolean = false,
     searchFocusRequest: Int = 0,
@@ -264,6 +267,7 @@ fun TasksScreen(
     if (selectedTask != null && !isEditing) {
         TaskDetailDialog(
             entry = selectedTask!!,
+            relatedEntries = relatedEntriesFor(selectedTask!!, allEntries),
             onDismiss = { selectedTask = null },
             onEdit = { isEditing = true },
             onDelete = {
@@ -313,6 +317,7 @@ fun TasksScreen(
 @Composable
 fun TaskDetailDialog(
     entry: CombinedEntry,
+    relatedEntries: List<CombinedEntry> = emptyList(),
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -357,6 +362,10 @@ fun TaskDetailDialog(
                     style = MaterialTheme.typography.labelMedium,
                     color = if (entry.completed == true) androidx.compose.ui.graphics.Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (relatedEntries.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    RelatedEntriesSection(relatedEntries)
+                }
                 if (entry.archived) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
