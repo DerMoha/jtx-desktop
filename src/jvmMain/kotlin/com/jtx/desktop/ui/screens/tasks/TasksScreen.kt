@@ -429,7 +429,7 @@ fun TaskEditDialog(
     var categories by remember { mutableStateOf(entry.categories.joinToString(", ")) }
     var color by remember { mutableStateOf(entry.color.orEmpty()) }
     var location by remember { mutableStateOf(entry.location.orEmpty()) }
-    var reminders by remember { mutableStateOf(entry.reminders.joinToString(", ") { it.minutesBefore.toString() }) }
+    var reminders by remember { mutableStateOf(entry.reminders.joinToString("\n") { "${it.minutesBefore} ${if (it.soundEnabled) "audio" else "display"}" }) }
     var comments by remember { mutableStateOf(entry.comments.joinToString("\n") { it.text }) }
     var subtasks by remember { mutableStateOf(entry.subtasks.joinToString("\n") { subtask -> "${if (subtask.completed) "[x]" else "[ ]"} ${subtask.title}" }) }
     var attachments by remember { mutableStateOf(entry.attachments.joinToString(", ") { it.uri }) }
@@ -589,8 +589,10 @@ fun TaskEditDialog(
                 OutlinedTextField(
                     value = reminders,
                     onValueChange = { reminders = it },
-                    label = { Text("Reminder minutes before") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("Reminders") },
+                    supportingText = { Text("One per line: minutes before, optional audio/display") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -666,7 +668,7 @@ fun TaskEditDialog(
                                 rawRule = recurrenceRawRule.ifBlank { null }
                             )
                         } else null,
-                        reminders = reminders.toCsvList().mapNotNull { it.toIntOrNull() }.map { Reminder(it) },
+                        reminders = reminders.toReminders(),
                         categories = categories.toCsvList(),
                         color = color.ifBlank { null },
                         location = location.ifBlank { null },
@@ -689,6 +691,19 @@ fun TaskEditDialog(
 }
 
 private fun String.toCsvList(): List<String> = split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+private fun String.toReminders(): List<Reminder> = lines()
+    .flatMap { it.split(',') }
+    .map { it.trim() }
+    .filter { it.isNotEmpty() }
+    .mapNotNull { line ->
+        val parts = line.split(Regex("\\s+"), limit = 2)
+        val minutes = parts.firstOrNull()?.toIntOrNull() ?: return@mapNotNull null
+        Reminder(
+            minutesBefore = minutes,
+            soundEnabled = parts.getOrNull(1)?.contains("display", ignoreCase = true) != true
+        )
+    }
 
 private fun Long.toDateTimeInput(): String = Instant.ofEpochMilli(this)
     .atZone(ZoneId.systemDefault())
