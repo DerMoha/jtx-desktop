@@ -2,6 +2,7 @@ package com.jtx.desktop.data.repository
 
 import com.jtx.desktop.data.local.LocalDataSource
 import com.jtx.desktop.data.remote.CalDavClient
+import com.jtx.desktop.data.remote.CalDavHttpException
 import com.jtx.desktop.data.remote.ICalendarParser
 import com.jtx.desktop.domain.model.*
 import kotlinx.coroutines.flow.Flow
@@ -355,14 +356,14 @@ class SyncRepository(
         val settings = local.getSettings()
         val discoveredCollections = discoverCollections(credentials).getOrNull().orEmpty()
         val collectionMetadata = discoveredCollections.findCollection(collection) ?: local.getCollectionByUrl(collection)
-        val uploadResult = uploadLocalDeletes(credentials) + uploadLocalCreates(credentials, collection) + uploadLocalUpdates(credentials)
+        val uploadResult = uploadLocalDeletes(credentials) + uploadLocalCreates(credentials, collection) + uploadLocalUpdates(credentials, collection)
         val fetchResult = calDavClient.fetchEntries(credentials, collection)
         return fetchResult.fold(
             onSuccess = { hrefs ->
                 var successCount = uploadResult.successCount
                 var failureCount = uploadResult.failureCount
                 val failures = uploadResult.failures.toMutableList()
-                val conflicts = mutableListOf<SyncConflictInfo>()
+                val conflicts = uploadResult.conflicts.toMutableList()
                 successCount += applyRemoteDeletes(collection, hrefs)
 
                 val objectResult = calDavClient.fetchCalendarObjects(credentials, collection, hrefs)
@@ -489,12 +490,14 @@ class SyncRepository(
     private data class LocalUploadResult(
         val successCount: Int,
         val failureCount: Int,
-        val failures: List<String>
+        val failures: List<String>,
+        val conflicts: List<SyncConflictInfo> = emptyList()
     ) {
         operator fun plus(other: LocalUploadResult): LocalUploadResult = LocalUploadResult(
             successCount = successCount + other.successCount,
             failureCount = failureCount + other.failureCount,
-            failures = failures + other.failures
+            failures = failures + other.failures,
+            conflicts = conflicts + other.conflicts
         )
     }
 
@@ -576,10 +579,11 @@ class SyncRepository(
         return LocalUploadResult(successCount, failureCount, failures)
     }
 
-    private suspend fun uploadLocalUpdates(credentials: CalDavCredentials): LocalUploadResult {
+    private suspend fun uploadLocalUpdates(credentials: CalDavCredentials, collection: String): LocalUploadResult {
         var successCount = 0
         var failureCount = 0
         val failures = mutableListOf<String>()
+        val conflicts = mutableListOf<SyncConflictInfo>()
         val updates = local.getDirtyObjectSyncMetadata().filter { metadata ->
             metadata.dirty && !metadata.deleted && metadata.href != null
         }
@@ -615,14 +619,45 @@ class SyncRepository(
                 },
                 onFailure = { error ->
                     val message = error.message ?: error::class.simpleName ?: "Unknown error"
-                    local.upsertObjectSyncMetadata(metadata.copy(lastError = message))
-                    failureCount++
-                    failures.add("Failed to upload ${metadata.entryType.name.lowercase()} ${metadata.entryId}: $message")
+                    val conflict = detectUploadConflict(credentials, collection, metadata, entry, error)
+                    if (conflict != null) {
+                        local.upsertObjectSyncMetadata(metadata.copy(lastError = "Conflict: remote object changed since last sync"))
+                        conflicts.add(conflict)
+                    } else {
+                        local.upsertObjectSyncMetadata(metadata.copy(lastError = message))
+                        failureCount++
+                        failures.add("Failed to upload ${metadata.entryType.name.lowercase()} ${metadata.entryId}: $message")
+                    }
                 }
             )
         }
 
-        return LocalUploadResult(successCount, failureCount, failures)
+        return LocalUploadResult(successCount, failureCount, failures, conflicts)
+    }
+
+    private suspend fun detectUploadConflict(
+        credentials: CalDavCredentials,
+        collection: String,
+        metadata: ObjectSyncMetadata,
+        localEntry: Any,
+        error: Throwable
+    ): SyncConflictInfo? {
+        val httpError = error as? CalDavHttpException ?: return null
+        if (httpError.statusCode !in setOf(409, 412)) return null
+        val href = metadata.href ?: return null
+        val remoteObject = calDavClient.fetchCalendarObjects(
+            credentials,
+            metadata.collectionUrl ?: collection,
+            listOf(href)
+        ).getOrNull()?.firstOrNull() ?: return null
+        val serverEntry = parser.parseEntry(remoteObject.data) ?: return null
+        return SyncConflictInfo(
+            localEntry = localEntry,
+            serverEntry = serverEntry,
+            serverHref = remoteObject.href,
+            localUpdated = localEntry.updatedValue() ?: 0,
+            serverUpdated = serverEntry.updatedValue() ?: 0
+        )
     }
 
     private suspend fun storeRemoteMetadata(

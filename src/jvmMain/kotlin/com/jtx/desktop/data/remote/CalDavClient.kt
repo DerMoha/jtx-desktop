@@ -9,6 +9,11 @@ import java.net.URL
 import java.util.Base64
 import javax.net.ssl.HttpsURLConnection
 
+class CalDavHttpException(
+    val statusCode: Int,
+    message: String
+) : Exception(message)
+
 class CalDavClient {
     private val connectTimeout = 30000
     private val readTimeout = 60000
@@ -198,7 +203,7 @@ class CalDavClient {
             if (responseCode in 200..299) {
                 Result.success(conn.getHeaderField("ETag"))
             } else {
-                Result.failure(Exception("HTTP $responseCode: ${conn.responseMessage}"))
+                Result.failure(CalDavHttpException(responseCode, "HTTP $responseCode: ${conn.responseMessage}"))
             }
         }
     }
@@ -225,7 +230,7 @@ class CalDavClient {
             if (responseCode in 200..299) {
                 Result.success(conn.getHeaderField("ETag"))
             } else {
-                Result.failure(Exception("HTTP $responseCode: ${conn.responseMessage}"))
+                Result.failure(CalDavHttpException(responseCode, "HTTP $responseCode: ${conn.responseMessage}"))
             }
         }
     }
