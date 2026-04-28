@@ -148,6 +148,7 @@ fun JtxApp(
     var allEntries by remember { mutableStateOf<List<CombinedEntry>>(emptyList()) }
     var entryToOpen by remember { mutableStateOf<CombinedEntry?>(null) }
     var reminderTasks by remember { mutableStateOf<List<TaskEntry>>(emptyList()) }
+    var reminderActionTask by remember { mutableStateOf<TaskEntry?>(null) }
     val rootFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
@@ -182,6 +183,7 @@ fun JtxApp(
             }
             ReminderScheduler.showDesktopNotification(title, message, trayManager)
             snackbarMessage = "$title: $message"
+            reminderActionTask = task
         }
     }
 
@@ -337,6 +339,12 @@ fun JtxApp(
             snackbarMessage = if (syncConflicts.isEmpty()) "Conflict resolved" else "Conflict resolved"
             refreshTrigger++
         }
+    }
+
+    fun openReminderTask(task: TaskEntry) {
+        selectedTab = Tab.Tasks
+        entryToOpen = allEntries.firstOrNull { it.id == task.id && it.type == EntryType.TASK }
+        reminderActionTask = null
     }
 
     fun insertCombinedEntry(entry: CombinedEntry) {
@@ -856,6 +864,32 @@ fun JtxApp(
                         }
                         TextButton(onClick = { resolveCurrentConflict(ConflictResolution.KEEP_BOTH) }) {
                             Text("Keep Both")
+                        }
+                    }
+                }
+            )
+        }
+
+        reminderActionTask?.let { task ->
+            AlertDialog(
+                onDismissRequest = { reminderActionTask = null },
+                title = { Text(task.title.ifBlank { "Task reminder" }) },
+                text = { Text("This task reminder is due now or soon.") },
+                confirmButton = {
+                    TextButton(onClick = { openReminderTask(task) }) {
+                        Text("Open")
+                    }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = { reminderActionTask = null }) {
+                            Text("Dismiss")
+                        }
+                        TextButton(onClick = {
+                            scope.launch { taskRepository.updateTaskCompleted(task.id, true) }
+                            reminderActionTask = null
+                        }) {
+                            Text("Complete")
                         }
                     }
                 }
