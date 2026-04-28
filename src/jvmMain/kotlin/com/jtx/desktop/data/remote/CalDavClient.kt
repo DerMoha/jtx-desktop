@@ -144,7 +144,7 @@ class ICalendarParser {
 
     private val commonKnownProperties = listOf(
         "BEGIN", "END", "VERSION", "PRODID", "UID", "DTSTAMP", "LAST-MODIFIED", "SUMMARY", "DESCRIPTION",
-        "CATEGORIES", "CREATED", "COLOR", "X-APPLE-STRUCTURED-LOCATION", "RELATED-TO", "ATTACH"
+        "CALSCALE", "CATEGORIES", "CREATED", "COLOR", "X-APPLE-STRUCTURED-LOCATION", "RELATED-TO", "ATTACH"
     )
 
     private fun unfoldLines(lines: List<String>): List<String> {
@@ -210,26 +210,26 @@ class ICalendarParser {
             for (line in lines) {
                 if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
                 when {
-                    line.startsWith("UID:") -> uid = line.substringAfter("UID:").trim()
-                    line.startsWith("SUMMARY:") -> summary = line.substringAfter("SUMMARY:").trim()
-                    line.startsWith("DESCRIPTION") -> {
+                    line.isProperty("UID") -> uid = line.propertyValue()
+                    line.isProperty("SUMMARY") -> summary = line.propertyValue()
+                    line.isProperty("DESCRIPTION") -> {
                         val value = line.substringAfter(":").trim()
                         if (description.isEmpty()) description = value else description += value
                     }
-                    line.startsWith("DTSTART") -> dtstart = parseIcsDate(line)
-                    line.startsWith("DTEND") -> dtend = parseIcsDate(line)
-                    line.startsWith("CATEGORIES:") -> categories = line.substringAfter("CATEGORIES:").trim().split(",").map { it.trim() }.toMutableList()
-                    line.startsWith("CREATED:") -> created = parseIcsDate(line)
-                    line.startsWith("DTSTAMP:") -> dtstamp = parseIcsDate(line)
-                    line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
-                    line.startsWith("COMMENT:") -> {
-                        val text = line.substringAfter("COMMENT:").trim()
+                    line.isProperty("DTSTART") -> dtstart = parseIcsDate(line)
+                    line.isProperty("DTEND") -> dtend = parseIcsDate(line)
+                    line.isProperty("CATEGORIES") -> categories = line.propertyValue().split(",").map { it.trim() }.toMutableList()
+                    line.isProperty("CREATED") -> created = parseIcsDate(line)
+                    line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
+                    line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
+                    line.isProperty("COMMENT") -> {
+                        val text = line.propertyValue()
                         comment = comment ?: text
                         comments = comments + EntryComment(text)
                     }
-                    line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
-                    line.startsWith("ATTACH") -> attachments = attachments + parseAttachment(line)
-                    line.startsWith("COLOR:") -> color = line.substringAfter("COLOR:").trim()
+                    line.isProperty("RELATED-TO") -> relatedEntries = relatedEntries + line.propertyValue()
+                    line.isProperty("ATTACH") -> attachments = attachments + parseAttachment(line)
+                    line.isProperty("COLOR") -> color = line.propertyValue()
                 }
             }
 
@@ -281,38 +281,38 @@ class ICalendarParser {
             for (line in lines) {
                 if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
                 when {
-                    line.startsWith("UID:") -> uid = line.substringAfter("UID:").trim()
-                    line.startsWith("SUMMARY:") -> summary = line.substringAfter("SUMMARY:").trim()
-                    line.startsWith("DESCRIPTION") -> {
+                    line.isProperty("UID") -> uid = line.propertyValue()
+                    line.isProperty("SUMMARY") -> summary = line.propertyValue()
+                    line.isProperty("DESCRIPTION") -> {
                         val value = line.substringAfter(":").trim()
                         if (description.isEmpty()) description = value else description += value
                     }
-                    line.startsWith("DUE:") -> due = parseIcsDate(line)
-                    line.startsWith("DTSTART") -> start = parseIcsDate(line)
-                    line.startsWith("STATUS:COMPLETED") -> completed = true
-                    line.startsWith("PERCENT-COMPLETE:") -> progress = line.substringAfter("PERCENT-COMPLETE:").trim().toIntOrNull() ?: 0
-                    line.startsWith("PRIORITY:") -> priority = parsePriority(line.substringAfter("PRIORITY:").trim())
-                    line.startsWith("RRULE:") -> recurrenceRule = parseRecurrenceRule(line.substringAfter("RRULE:").trim())
-                    line.startsWith("RDATE") -> {
+                    line.isProperty("DUE") -> due = parseIcsDate(line)
+                    line.isProperty("DTSTART") -> start = parseIcsDate(line)
+                    line.isProperty("STATUS") && line.propertyValue().equals("COMPLETED", ignoreCase = true) -> completed = true
+                    line.isProperty("PERCENT-COMPLETE") -> progress = line.propertyValue().toIntOrNull() ?: 0
+                    line.isProperty("PRIORITY") -> priority = parsePriority(line.propertyValue())
+                    line.isProperty("RRULE") -> recurrenceRule = parseRecurrenceRule(line.propertyValue())
+                    line.isProperty("RDATE") -> {
                         recurrenceDates = recurrenceDates + parseDateList(line)
                         recurrenceTimezone = recurrenceTimezone ?: parseTimezone(line)
                     }
-                    line.startsWith("EXDATE") -> {
+                    line.isProperty("EXDATE") -> {
                         exceptionDates = exceptionDates + parseDateList(line)
                         recurrenceTimezone = recurrenceTimezone ?: parseTimezone(line)
                     }
-                    line.startsWith("RECURRENCE-ID") -> {
+                    line.isProperty("RECURRENCE-ID") -> {
                         recurrenceId = parseIcsDate(line)
                         recurrenceIdTimezone = parseTimezone(line)
                     }
-                    line.startsWith("CATEGORIES:") -> categories = line.substringAfter("CATEGORIES:").trim().split(",").map { it.trim() }.toMutableList()
-                    line.startsWith("CREATED:") -> created = parseIcsDate(line)
-                    line.startsWith("DTSTAMP:") -> dtstamp = parseIcsDate(line)
-                    line.startsWith("LOCATION:") -> location = line.substringAfter("LOCATION:").trim()
-                    line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
-                    line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
-                    line.startsWith("ATTACH") -> attachments = attachments + parseAttachment(line)
-                    line.startsWith("COMMENT:") -> comments = comments + EntryComment(line.substringAfter("COMMENT:").trim())
+                    line.isProperty("CATEGORIES") -> categories = line.propertyValue().split(",").map { it.trim() }.toMutableList()
+                    line.isProperty("CREATED") -> created = parseIcsDate(line)
+                    line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
+                    line.isProperty("LOCATION") -> location = line.propertyValue()
+                    line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
+                    line.isProperty("RELATED-TO") -> relatedEntries = relatedEntries + line.propertyValue()
+                    line.isProperty("ATTACH") -> attachments = attachments + parseAttachment(line)
+                    line.isProperty("COMMENT") -> comments = comments + EntryComment(line.propertyValue())
                 }
             }
 
@@ -353,20 +353,20 @@ class ICalendarParser {
             for (line in lines) {
                 if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
                 when {
-                    line.startsWith("UID:") -> uid = line.substringAfter("UID:").trim()
-                    line.startsWith("SUMMARY:") -> summary = line.substringAfter("SUMMARY:").trim()
-                    line.startsWith("DESCRIPTION") -> {
+                    line.isProperty("UID") -> uid = line.propertyValue()
+                    line.isProperty("SUMMARY") -> summary = line.propertyValue()
+                    line.isProperty("DESCRIPTION") -> {
                         val value = line.substringAfter(":").trim()
                         if (description.isEmpty()) description = value else description += value
                     }
-                    line.startsWith("CATEGORIES:") -> categories = line.substringAfter("CATEGORIES:").trim().split(",").map { it.trim() }.toMutableList()
-                    line.startsWith("CREATED:") -> created = parseIcsDate(line)
-                    line.startsWith("DTSTAMP:") -> dtstamp = parseIcsDate(line)
-                    line.startsWith("COLOR:") -> color = line.substringAfter("COLOR:").trim()
-                    line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
-                    line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
-                    line.startsWith("ATTACH") -> attachments = attachments + parseAttachment(line)
-                    line.startsWith("COMMENT:") -> comments = comments + EntryComment(line.substringAfter("COMMENT:").trim())
+                    line.isProperty("CATEGORIES") -> categories = line.propertyValue().split(",").map { it.trim() }.toMutableList()
+                    line.isProperty("CREATED") -> created = parseIcsDate(line)
+                    line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
+                    line.isProperty("COLOR") -> color = line.propertyValue()
+                    line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
+                    line.isProperty("RELATED-TO") -> relatedEntries = relatedEntries + line.propertyValue()
+                    line.isProperty("ATTACH") -> attachments = attachments + parseAttachment(line)
+                    line.isProperty("COMMENT") -> comments = comments + EntryComment(line.propertyValue())
                 }
             }
 
@@ -511,9 +511,15 @@ class ICalendarParser {
 
     private fun isUnknownContentLine(line: String, knownProperties: List<String>): Boolean {
         if (!line.contains(":")) return false
-        val property = line.substringBefore(":").substringBefore(";").uppercase()
+        val property = propertyName(line)
         return knownProperties.none { it == property }
     }
+
+    private fun String.isProperty(name: String): Boolean = propertyName(this) == name
+
+    private fun String.propertyValue(): String = substringAfter(":").trim()
+
+    private fun propertyName(line: String): String = line.substringBefore(":").substringBefore(";").uppercase()
 
     private fun parseRecurrenceRule(value: String): RecurrenceRule? {
         val parts = value.split(";").mapNotNull { part ->
