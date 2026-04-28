@@ -5,6 +5,7 @@ import com.jtx.desktop.data.remote.CalDavClient
 import com.jtx.desktop.data.remote.ICalendarParser
 import com.jtx.desktop.domain.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 class JournalRepository(private val local: LocalDataSource) {
@@ -356,6 +357,7 @@ class SyncRepository(
                 var failureCount = uploadResult.failureCount
                 val failures = uploadResult.failures.toMutableList()
                 val conflicts = mutableListOf<SyncConflictInfo>()
+                successCount += applyRemoteDeletes(collection, hrefs)
 
                 val objectResult = calDavClient.fetchCalendarObjects(credentials, collection, hrefs)
                 objectResult.fold(
@@ -445,6 +447,37 @@ class SyncRepository(
         return firstOrNull { collection ->
             collection.url.trimEnd('/') == normalizedUrl || collection.url.trim('/').endsWith(normalizedUrl.trim('/'))
         }
+    }
+
+    private suspend fun applyRemoteDeletes(collection: String, remoteHrefs: List<String>): Int {
+        val remoteHrefSet = remoteHrefs.map { it.trimEnd('/') }.toSet()
+        val metadata = local.getAllObjectSyncMetadata().first()
+        var deleteCount = 0
+
+        metadata.filter { item ->
+            item.href != null &&
+                !item.dirty &&
+                !item.deleted &&
+                item.collectionUrl.matchesCollection(collection) &&
+                item.href.trimEnd('/') !in remoteHrefSet
+        }.forEach { item ->
+            when (item.entryType) {
+                EntryType.JOURNAL -> local.deleteJournal(item.entryId)
+                EntryType.NOTE -> local.deleteNote(item.entryId)
+                EntryType.TASK -> local.deleteTask(item.entryId)
+            }
+            local.upsertObjectSyncMetadata(item.copy(deleted = true, dirty = false))
+            deleteCount++
+        }
+
+        return deleteCount
+    }
+
+    private fun String?.matchesCollection(collection: String): Boolean {
+        if (this == null) return false
+        val left = trimEnd('/')
+        val right = collection.trimEnd('/')
+        return left == right || left.trim('/').endsWith(right.trim('/'))
     }
 
     private data class LocalUploadResult(
