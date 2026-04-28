@@ -339,6 +339,7 @@ fun JtxApp(
             val result = syncRepository.sync(credentials, collection)
             result.onSuccess { syncResult ->
                 syncConflicts = syncResult.conflicts
+                settings = syncRepository.getSettings()
                 syncState = syncStateForResult(syncResult)
                 snackbarMessage = if (syncResult.conflicts.isEmpty()) {
                     "Sync complete"
@@ -677,6 +678,13 @@ fun JtxApp(
                     SyncState.OFFLINE -> TrayStatus.OFFLINE
                 }
             }
+        )
+    }
+
+    LaunchedEffect(syncIssues, settings?.lastSyncTime) {
+        trayManager?.updateSyncSummary(
+            pendingCount = syncIssues.count { it.dirty },
+            lastSyncTime = settings?.lastSyncTime
         )
     }
 
