@@ -477,7 +477,27 @@ class ICalendarParser {
         }.withIcsLineEndings()
     }
 
-    private fun String.withIcsLineEndings(): String = trimEnd().lines().joinToString("\r\n", postfix = "\r\n")
+    private fun String.withIcsLineEndings(): String = trimEnd()
+        .lines()
+        .flatMap { foldIcsLine(it) }
+        .joinToString("\r\n", postfix = "\r\n")
+
+    private fun foldIcsLine(line: String): List<String> {
+        val limit = 75
+        if (line.length <= limit) return listOf(line)
+
+        val lines = mutableListOf<String>()
+        var start = 0
+        var chunkSize = limit
+        while (start < line.length) {
+            val end = minOf(start + chunkSize, line.length)
+            val prefix = if (start == 0) "" else " "
+            lines.add(prefix + line.substring(start, end))
+            start = end
+            chunkSize = limit - 1
+        }
+        return lines
+    }
 
     private fun parseIcsDate(line: String): Long? {
         return try {
