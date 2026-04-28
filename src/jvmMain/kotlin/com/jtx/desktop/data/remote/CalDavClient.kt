@@ -144,7 +144,8 @@ class ICalendarParser {
 
     private val commonKnownProperties = listOf(
         "BEGIN", "END", "VERSION", "PRODID", "UID", "DTSTAMP", "LAST-MODIFIED", "SUMMARY", "DESCRIPTION",
-        "CALSCALE", "CATEGORIES", "CREATED", "COLOR", "SEQUENCE", "X-APPLE-STRUCTURED-LOCATION", "RELATED-TO", "ATTACH"
+        "CALSCALE", "CATEGORIES", "CREATED", "COLOR", "SEQUENCE", "URL", "CONTACT", "GEO", "CLASS",
+        "LOCATION", "X-APPLE-STRUCTURED-LOCATION", "RELATED-TO", "ATTACH"
     )
 
     private fun unfoldLines(lines: List<String>): List<String> {
@@ -206,6 +207,10 @@ class ICalendarParser {
             var sequence = 0
             var color: String? = null
             var location: String? = null
+            var url: String? = null
+            var contact: String? = null
+            var geo: String? = null
+            var classification: String? = null
             var comment: String? = null
             var relatedEntries = emptyList<String>()
             var attachments = emptyList<EntryAttachment>()
@@ -235,6 +240,11 @@ class ICalendarParser {
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
                     line.isProperty("LAST-MODIFIED") -> lastModified = parseIcsDate(line)
                     line.isProperty("SEQUENCE") -> sequence = line.propertyValue().toIntOrNull() ?: 0
+                    line.isProperty("URL") -> url = line.propertyValue()
+                    line.isProperty("CONTACT") -> contact = line.propertyTextValue()
+                    line.isProperty("GEO") -> geo = line.propertyValue()
+                    line.isProperty("CLASS") -> classification = line.propertyValue()
+                    line.isProperty("LOCATION") -> location = line.propertyTextValue()
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
                     line.isProperty("COMMENT") -> {
                         val text = line.propertyTextValue()
@@ -258,7 +268,8 @@ class ICalendarParser {
                 color = color, location = location, comment = comment,
                 relatedEntries = relatedEntries, attachments = attachments,
                 comments = comments, unknownProperties = unknownProperties,
-                sequence = sequence
+                sequence = sequence, url = url, contact = contact,
+                geo = geo, classification = classification
             )
         } catch (e: Exception) { null }
     }
@@ -282,6 +293,10 @@ class ICalendarParser {
             var sequence = 0
             var color: String? = null
             var location: String? = null
+            var url: String? = null
+            var contact: String? = null
+            var geo: String? = null
+            var classification: String? = null
             var priority = Priority.NONE
             var relatedEntries = emptyList<String>()
             var attachments = emptyList<EntryAttachment>()
@@ -339,6 +354,10 @@ class ICalendarParser {
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
                     line.isProperty("LAST-MODIFIED") -> lastModified = parseIcsDate(line)
                     line.isProperty("SEQUENCE") -> sequence = line.propertyValue().toIntOrNull() ?: 0
+                    line.isProperty("URL") -> url = line.propertyValue()
+                    line.isProperty("CONTACT") -> contact = line.propertyTextValue()
+                    line.isProperty("GEO") -> geo = line.propertyValue()
+                    line.isProperty("CLASS") -> classification = line.propertyValue()
                     line.isProperty("LOCATION") -> location = line.propertyTextValue()
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
                     line.isProperty("COLOR") -> color = line.propertyValue()
@@ -362,7 +381,8 @@ class ICalendarParser {
                 dueTimezone = dueTimezone, startTimezone = startTimezone,
                 recurrenceTimezone = recurrenceTimezone, recurrenceIdTimezone = recurrenceIdTimezone,
                 attachments = attachments, comments = comments,
-                unknownProperties = unknownProperties, sequence = sequence
+                unknownProperties = unknownProperties, sequence = sequence,
+                url = url, contact = contact, geo = geo, classification = classification
             )
         } catch (e: Exception) { null }
     }
@@ -380,6 +400,10 @@ class ICalendarParser {
             var sequence = 0
             var color: String? = null
             var location: String? = null
+            var url: String? = null
+            var contact: String? = null
+            var geo: String? = null
+            var classification: String? = null
             var relatedEntries = emptyList<String>()
             var attachments = emptyList<EntryAttachment>()
             var comments = emptyList<EntryComment>()
@@ -400,6 +424,11 @@ class ICalendarParser {
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
                     line.isProperty("LAST-MODIFIED") -> lastModified = parseIcsDate(line)
                     line.isProperty("SEQUENCE") -> sequence = line.propertyValue().toIntOrNull() ?: 0
+                    line.isProperty("URL") -> url = line.propertyValue()
+                    line.isProperty("CONTACT") -> contact = line.propertyTextValue()
+                    line.isProperty("GEO") -> geo = line.propertyValue()
+                    line.isProperty("CLASS") -> classification = line.propertyValue()
+                    line.isProperty("LOCATION") -> location = line.propertyTextValue()
                     line.isProperty("COLOR") -> color = line.propertyValue()
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
                     line.isProperty("RELATED-TO") -> relatedEntries = relatedEntries + line.propertyValue()
@@ -416,7 +445,8 @@ class ICalendarParser {
                 updated = lastModified ?: dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, relatedEntries = relatedEntries,
                 attachments = attachments, comments = comments,
-                unknownProperties = unknownProperties, sequence = sequence
+                unknownProperties = unknownProperties, sequence = sequence,
+                url = url, contact = contact, geo = geo, classification = classification
             )
         } catch (e: Exception) { null }
     }
@@ -434,6 +464,10 @@ class ICalendarParser {
             var sequence = 0
             var color: String? = null
             var location: String? = null
+            var url: String? = null
+            var contact: String? = null
+            var geo: String? = null
+            var classification: String? = null
             var relatedEntries = emptyList<String>()
             var attachments = emptyList<EntryAttachment>()
             var comments = emptyList<EntryComment>()
@@ -454,6 +488,11 @@ class ICalendarParser {
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
                     line.isProperty("LAST-MODIFIED") -> lastModified = parseIcsDate(line)
                     line.isProperty("SEQUENCE") -> sequence = line.propertyValue().toIntOrNull() ?: 0
+                    line.isProperty("URL") -> url = line.propertyValue()
+                    line.isProperty("CONTACT") -> contact = line.propertyTextValue()
+                    line.isProperty("GEO") -> geo = line.propertyValue()
+                    line.isProperty("CLASS") -> classification = line.propertyValue()
+                    line.isProperty("LOCATION") -> location = line.propertyTextValue()
                     line.isProperty("COLOR") -> color = line.propertyValue()
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
                     line.isProperty("RELATED-TO") -> relatedEntries = relatedEntries + line.propertyValue()
@@ -470,7 +509,8 @@ class ICalendarParser {
                 updated = lastModified ?: dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, relatedEntries = relatedEntries,
                 attachments = attachments, comments = comments,
-                unknownProperties = unknownProperties, sequence = sequence
+                unknownProperties = unknownProperties, sequence = sequence,
+                url = url, contact = contact, geo = geo, classification = classification
             )
         } catch (e: Exception) { null }
     }
@@ -498,7 +538,7 @@ class ICalendarParser {
             if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description.escapeIcsText()}")
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",") { it.escapeIcsText() }}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
-            if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
+            appendOptionalFields(entry.url, entry.contact, entry.geo, entry.classification, entry.location)
             entry.comments.ifEmpty { entry.comment?.let { listOf(EntryComment(it)) } ?: emptyList() }
                 .forEach { appendLine("COMMENT:${it.text.escapeIcsText()}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
@@ -534,7 +574,7 @@ class ICalendarParser {
             if (entry.recurrenceId != null) appendLine("RECURRENCE-ID${entry.recurrenceIdTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.recurrenceId, entry.recurrenceIdTimezone)}")
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",") { it.escapeIcsText() }}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
-            if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
+            appendOptionalFields(entry.url, entry.contact, entry.geo, entry.classification, entry.location)
             entry.comments.forEach { appendLine("COMMENT:${it.text.escapeIcsText()}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
@@ -561,7 +601,7 @@ class ICalendarParser {
             if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description.escapeIcsText()}")
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",") { it.escapeIcsText() }}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
-            if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
+            appendOptionalFields(entry.url, entry.contact, entry.geo, entry.classification, entry.location)
             entry.comments.forEach { appendLine("COMMENT:${it.text.escapeIcsText()}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
@@ -577,6 +617,20 @@ class ICalendarParser {
         .lines()
         .flatMap { foldIcsLine(it) }
         .joinToString("\r\n", postfix = "\r\n")
+
+    private fun StringBuilder.appendOptionalFields(
+        url: String?,
+        contact: String?,
+        geo: String?,
+        classification: String?,
+        location: String?
+    ) {
+        if (!url.isNullOrBlank()) appendLine("URL:$url")
+        if (!contact.isNullOrBlank()) appendLine("CONTACT:${contact.escapeIcsText()}")
+        if (!geo.isNullOrBlank()) appendLine("GEO:$geo")
+        if (!classification.isNullOrBlank()) appendLine("CLASS:$classification")
+        if (!location.isNullOrBlank()) appendLine("LOCATION:${location.escapeIcsText()}")
+    }
 
     private fun foldIcsLine(line: String): List<String> {
         val limit = 75

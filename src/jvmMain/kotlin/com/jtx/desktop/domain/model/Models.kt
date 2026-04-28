@@ -24,6 +24,10 @@ data class JournalEntry(
     val comments: List<EntryComment> = emptyList(),
     val unknownProperties: List<UnknownProperty> = emptyList(),
     val sequence: Int = 0,
+    val url: String? = null,
+    val contact: String? = null,
+    val geo: String? = null,
+    val classification: String? = null,
     val archived: Boolean = false
 )
 
@@ -44,6 +48,10 @@ data class NoteEntry(
     val comments: List<EntryComment> = emptyList(),
     val unknownProperties: List<UnknownProperty> = emptyList(),
     val sequence: Int = 0,
+    val url: String? = null,
+    val contact: String? = null,
+    val geo: String? = null,
+    val classification: String? = null,
     val archived: Boolean = false
 )
 
@@ -80,7 +88,11 @@ data class TaskEntry(
     val attachments: List<EntryAttachment> = emptyList(),
     val comments: List<EntryComment> = emptyList(),
     val unknownProperties: List<UnknownProperty> = emptyList(),
-    val sequence: Int = 0
+    val sequence: Int = 0,
+    val url: String? = null,
+    val contact: String? = null,
+    val geo: String? = null,
+    val classification: String? = null
 )
 
 @Serializable

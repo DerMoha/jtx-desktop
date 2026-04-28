@@ -118,6 +118,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 comment TEXT,
                 related_entries TEXT NOT NULL DEFAULT '[]',
                 sequence INTEGER NOT NULL DEFAULT 0,
+                url TEXT,
+                contact TEXT,
+                geo TEXT,
+                classification TEXT,
                 archived INTEGER DEFAULT 0
             )
             """
@@ -137,6 +141,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 location TEXT,
                 related_entries TEXT NOT NULL DEFAULT '[]',
                 sequence INTEGER NOT NULL DEFAULT 0,
+                url TEXT,
+                contact TEXT,
+                geo TEXT,
+                classification TEXT,
                 archived INTEGER DEFAULT 0
             )
             """
@@ -171,6 +179,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 priority TEXT NOT NULL DEFAULT 'NONE',
                 timezone TEXT,
                 sequence INTEGER NOT NULL DEFAULT 0,
+                url TEXT,
+                contact TEXT,
+                geo TEXT,
+                classification TEXT,
                 archived INTEGER DEFAULT 0
             )
             """
@@ -283,9 +295,17 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         addColumnIfMissing(stmt, "journals", "dtend_timezone", "TEXT")
         addColumnIfMissing(stmt, "journals", "related_entries", "TEXT NOT NULL DEFAULT '[]'")
         addColumnIfMissing(stmt, "journals", "sequence", "INTEGER NOT NULL DEFAULT 0")
+        addColumnIfMissing(stmt, "journals", "url", "TEXT")
+        addColumnIfMissing(stmt, "journals", "contact", "TEXT")
+        addColumnIfMissing(stmt, "journals", "geo", "TEXT")
+        addColumnIfMissing(stmt, "journals", "classification", "TEXT")
         addColumnIfMissing(stmt, "notes", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
         addColumnIfMissing(stmt, "notes", "related_entries", "TEXT NOT NULL DEFAULT '[]'")
         addColumnIfMissing(stmt, "notes", "sequence", "INTEGER NOT NULL DEFAULT 0")
+        addColumnIfMissing(stmt, "notes", "url", "TEXT")
+        addColumnIfMissing(stmt, "notes", "contact", "TEXT")
+        addColumnIfMissing(stmt, "notes", "geo", "TEXT")
+        addColumnIfMissing(stmt, "notes", "classification", "TEXT")
         addColumnIfMissing(stmt, "tasks", "due_timezone", "TEXT")
         addColumnIfMissing(stmt, "tasks", "start_timezone", "TEXT")
         addColumnIfMissing(stmt, "tasks", "completed_timezone", "TEXT")
@@ -297,6 +317,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         addColumnIfMissing(stmt, "tasks", "priority", "TEXT NOT NULL DEFAULT 'NONE'")
         addColumnIfMissing(stmt, "tasks", "timezone", "TEXT")
         addColumnIfMissing(stmt, "tasks", "sequence", "INTEGER NOT NULL DEFAULT 0")
+        addColumnIfMissing(stmt, "tasks", "url", "TEXT")
+        addColumnIfMissing(stmt, "tasks", "contact", "TEXT")
+        addColumnIfMissing(stmt, "tasks", "geo", "TEXT")
+        addColumnIfMissing(stmt, "tasks", "classification", "TEXT")
     }
 
     private fun getSchemaVersion(stmt: Statement): Int =
@@ -400,6 +424,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             comments = loadEntryComments(EntryType.JOURNAL, rs.getString("id")),
             unknownProperties = loadEntryUnknownProperties(EntryType.JOURNAL, rs.getString("id")),
             sequence = rs.getInt("sequence"),
+            url = rs.getString("url"),
+            contact = rs.getString("contact"),
+            geo = rs.getString("geo"),
+            classification = rs.getString("classification"),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -421,6 +449,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             comments = loadEntryComments(EntryType.NOTE, rs.getString("id")),
             unknownProperties = loadEntryUnknownProperties(EntryType.NOTE, rs.getString("id")),
             sequence = rs.getInt("sequence"),
+            url = rs.getString("url"),
+            contact = rs.getString("contact"),
+            geo = rs.getString("geo"),
+            classification = rs.getString("classification"),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -458,7 +490,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             attachments = loadEntryAttachments(EntryType.TASK, rs.getString("id")),
             comments = loadEntryComments(EntryType.TASK, rs.getString("id")),
             unknownProperties = loadEntryUnknownProperties(EntryType.TASK, rs.getString("id")),
-            sequence = rs.getInt("sequence")
+            sequence = rs.getInt("sequence"),
+            url = rs.getString("url"),
+            contact = rs.getString("contact"),
+            geo = rs.getString("geo"),
+            classification = rs.getString("classification")
         )
     }
 
@@ -695,8 +731,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO journals
-                   (id, uid, title, description, description_format, dtstart, dtstart_timezone, dtend, dtend_timezone, categories, created, updated, color, location, comment, related_entries, sequence, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, description_format, dtstart, dtstart_timezone, dtend, dtend_timezone, categories, created, updated, color, location, comment, related_entries, sequence, url, contact, geo, classification, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -715,7 +751,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(15, entry.comment)
                 ps.setString(16, Json.encodeToString(entry.relatedEntries))
                 ps.setInt(17, entry.sequence)
-                ps.setInt(18, if (entry.archived) 1 else 0)
+                ps.setString(18, entry.url)
+                ps.setString(19, entry.contact)
+                ps.setString(20, entry.geo)
+                ps.setString(21, entry.classification)
+                ps.setInt(22, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
@@ -729,8 +769,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO notes
-                   (id, uid, title, description, description_format, categories, created, updated, color, location, related_entries, sequence, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, description_format, categories, created, updated, color, location, related_entries, sequence, url, contact, geo, classification, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -744,7 +784,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(10, entry.location)
                 ps.setString(11, Json.encodeToString(entry.relatedEntries))
                 ps.setInt(12, entry.sequence)
-                ps.setInt(13, if (entry.archived) 1 else 0)
+                ps.setString(13, entry.url)
+                ps.setString(14, entry.contact)
+                ps.setString(15, entry.geo)
+                ps.setString(16, entry.classification)
+                ps.setInt(17, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
@@ -758,8 +802,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO tasks
-                   (id, uid, title, description, due, due_timezone, start, start_timezone, completed, completed_timezone, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, recurrence_dates, exception_dates, recurrence_id, recurrence_timezone, recurrence_id_timezone, priority, timezone, sequence, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, due, due_timezone, start, start_timezone, completed, completed_timezone, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, recurrence_dates, exception_dates, recurrence_id, recurrence_timezone, recurrence_id_timezone, priority, timezone, sequence, url, contact, geo, classification, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -788,7 +832,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(25, entry.priority.name)
                 ps.setString(26, entry.timezone)
                 ps.setInt(27, entry.sequence)
-                ps.setInt(28, if (entry.archived) 1 else 0)
+                ps.setString(28, entry.url)
+                ps.setString(29, entry.contact)
+                ps.setString(30, entry.geo)
+                ps.setString(31, entry.classification)
+                ps.setInt(32, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
