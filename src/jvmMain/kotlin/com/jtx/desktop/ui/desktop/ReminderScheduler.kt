@@ -13,6 +13,10 @@ object ReminderScheduler {
 
     fun scheduleReminders(scope: CoroutineScope, tasks: List<TaskEntry>, onReminder: (TaskEntry, Reminder) -> Unit) {
         schedulerJob?.cancel()
+        val activeKeys = tasks.flatMap { task ->
+            task.reminders.mapNotNull { reminder -> task.due?.let { "${task.id}_${it}_${reminder.minutesBefore}" } }
+        }.toSet()
+        checkedTasks.retainAll(activeKeys)
         schedulerJob = scope.launch {
             while (isActive) {
                 val now = System.currentTimeMillis()
@@ -25,7 +29,7 @@ object ReminderScheduler {
                         val dueTime = task.due
                         val reminderTime = dueTime - (reminder.minutesBefore * 60 * 1000L)
 
-                        if (now >= reminderTime && now < reminderTime + 60000) {
+                        if (now >= reminderTime && now <= dueTime) {
                             onReminder(task, reminder)
                             checkedTasks.add(key)
                         }
@@ -39,6 +43,7 @@ object ReminderScheduler {
     fun cancelReminders() {
         schedulerJob?.cancel()
         schedulerJob = null
+        checkedTasks.clear()
     }
 
     fun showDesktopNotification(title: String, message: String, trayManager: TrayManager?) {

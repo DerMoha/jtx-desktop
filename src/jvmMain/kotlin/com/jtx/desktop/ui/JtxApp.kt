@@ -185,6 +185,10 @@ fun JtxApp(
         }
     }
 
+    DisposableEffect(Unit) {
+        onDispose { ReminderScheduler.cancelReminders() }
+    }
+
     fun createNewEntry(
         type: EntryType,
         title: String,
