@@ -1146,11 +1146,20 @@ class ICalendarParser {
     private fun EntryAttachment.toIcsAttach(): String {
         return buildString {
             append("ATTACH")
-            if (!mimeType.isNullOrBlank()) append(";FMTTYPE=$mimeType")
-            if (!filename.isNullOrBlank()) append(";FILENAME=$filename")
+            append(";VALUE=URI")
+            if (!mimeType.isNullOrBlank()) append(";FMTTYPE=${mimeType.escapeIcsParam()}")
+            if (!filename.isNullOrBlank()) append(";FILENAME=${filename.escapeIcsParam()}")
             if (size != null) append(";SIZE=$size")
+            // Keep localPath desktop-only. Android/jtxBoard should only see the portable ATTACH URI.
             append(":$uri")
         }
+    }
+
+    private fun String.escapeIcsParam(): String {
+        return replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace(";", "\\;")
+            .replace(",", "\\,")
     }
 
     private fun Reminder.toIcsAlarm(): String {
