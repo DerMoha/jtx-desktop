@@ -14,8 +14,8 @@ class JournalRepository(private val local: LocalDataSource) {
         onDataChange = listener
     }
 
-    fun getAll(): Flow<List<JournalEntry>> = local.getAllJournals()
-    fun getAllCombined(): Flow<List<CombinedEntry>> = local.getAllJournals().map { journals ->
+    fun getAll(includeArchived: Boolean = false): Flow<List<JournalEntry>> = local.getAllJournals(includeArchived)
+    fun getAllCombined(includeArchived: Boolean = false): Flow<List<CombinedEntry>> = local.getAllJournals(includeArchived).map { journals ->
         journals.map { journal ->
             CombinedEntry(
                 id = journal.id,
@@ -63,8 +63,8 @@ class NoteRepository(private val local: LocalDataSource) {
         onDataChange = listener
     }
 
-    fun getAll(): Flow<List<NoteEntry>> = local.getAllNotes()
-    fun getAllCombined(): Flow<List<CombinedEntry>> = local.getAllNotes().map { notes ->
+    fun getAll(includeArchived: Boolean = false): Flow<List<NoteEntry>> = local.getAllNotes(includeArchived)
+    fun getAllCombined(includeArchived: Boolean = false): Flow<List<CombinedEntry>> = local.getAllNotes(includeArchived).map { notes ->
         notes.map { note ->
             CombinedEntry(
                 id = note.id,
@@ -112,8 +112,8 @@ class TaskRepository(private val local: LocalDataSource) {
         onDataChange = listener
     }
 
-    fun getAll(): Flow<List<TaskEntry>> = local.getAllTasks()
-    fun getAllCombined(): Flow<List<CombinedEntry>> = local.getAllTasks().map { tasks ->
+    fun getAll(includeArchived: Boolean = false): Flow<List<TaskEntry>> = local.getAllTasks(includeArchived)
+    fun getAllCombined(includeArchived: Boolean = false): Flow<List<CombinedEntry>> = local.getAllTasks(includeArchived).map { tasks ->
         tasks.map { task ->
             CombinedEntry(
                 id = task.id,

@@ -31,8 +31,8 @@ fun JournalsScreen(
     onUpdate: (CombinedEntry, CombinedEntry) -> Unit = { _, _ -> }
 ) {
     var journals by remember { mutableStateOf(listOf<CombinedEntry>()) }
-    LaunchedEffect(Unit) {
-        repository.getAllCombined().collect { journals = it }
+    LaunchedEffect(showArchived) {
+        repository.getAllCombined(includeArchived = showArchived).collect { journals = it }
     }
     var selectedEntry by remember { mutableStateOf<CombinedEntry?>(null) }
     var isEditing by remember { mutableStateOf(false) }

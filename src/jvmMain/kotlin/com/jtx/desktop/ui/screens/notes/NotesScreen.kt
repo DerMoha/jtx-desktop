@@ -29,8 +29,8 @@ fun NotesScreen(
     onUpdate: (CombinedEntry, CombinedEntry) -> Unit = { _, _ -> }
 ) {
     var notes by remember { mutableStateOf(listOf<CombinedEntry>()) }
-    LaunchedEffect(Unit) {
-        repository.getAllCombined().collect { notes = it }
+    LaunchedEffect(showArchived) {
+        repository.getAllCombined(includeArchived = showArchived).collect { notes = it }
     }
     var selectedNote by remember { mutableStateOf<CombinedEntry?>(null) }
     var isEditing by remember { mutableStateOf(false) }

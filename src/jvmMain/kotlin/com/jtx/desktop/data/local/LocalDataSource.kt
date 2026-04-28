@@ -4,9 +4,9 @@ import com.jtx.desktop.domain.model.*
 import kotlinx.coroutines.flow.Flow
 
 interface LocalDataSource {
-    fun getAllJournals(): Flow<List<JournalEntry>>
-    fun getAllNotes(): Flow<List<NoteEntry>>
-    fun getAllTasks(): Flow<List<TaskEntry>>
+    fun getAllJournals(includeArchived: Boolean = false): Flow<List<JournalEntry>>
+    fun getAllNotes(includeArchived: Boolean = false): Flow<List<NoteEntry>>
+    fun getAllTasks(includeArchived: Boolean = false): Flow<List<TaskEntry>>
 
     suspend fun getJournalById(id: String): JournalEntry?
     suspend fun getNoteById(id: String): NoteEntry?

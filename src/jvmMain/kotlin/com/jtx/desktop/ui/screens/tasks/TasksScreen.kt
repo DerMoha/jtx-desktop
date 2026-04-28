@@ -37,8 +37,8 @@ fun TasksScreen(
     onUpdate: (CombinedEntry, CombinedEntry) -> Unit = { _, _ -> }
 ) {
     var tasks by remember { mutableStateOf(listOf<CombinedEntry>()) }
-    LaunchedEffect(Unit) {
-        repository.getAllCombined().collect { tasks = it }
+    LaunchedEffect(showArchived) {
+        repository.getAllCombined(includeArchived = showArchived).collect { tasks = it }
     }
     var selectedTask by remember { mutableStateOf<CombinedEntry?>(null) }
     var isEditing by remember { mutableStateOf(false) }

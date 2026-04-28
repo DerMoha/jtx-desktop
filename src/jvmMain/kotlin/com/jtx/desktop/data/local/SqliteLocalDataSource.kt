@@ -4,7 +4,7 @@ import com.jtx.desktop.domain.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -111,14 +111,15 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
     }
 
     private fun loadAllData() {
-        _journals.value = loadJournals()
-        _notes.value = loadNotes()
-        _tasks.value = loadTasks()
+        _journals.value = loadJournals(includeArchived = true)
+        _notes.value = loadNotes(includeArchived = true)
+        _tasks.value = loadTasks(includeArchived = true)
     }
 
-    private fun loadJournals(): List<JournalEntry> = useConnection { conn ->
+    private fun loadJournals(includeArchived: Boolean = false): List<JournalEntry> = useConnection { conn ->
         conn.createStatement().use { stmt ->
-            stmt.executeQuery("SELECT * FROM journals WHERE archived = 0").use { rs ->
+            val whereClause = if (includeArchived) "" else " WHERE archived = 0"
+            stmt.executeQuery("SELECT * FROM journals$whereClause").use { rs ->
                 val list = mutableListOf<JournalEntry>()
                 while (rs.next()) {
                     list.add(journalFromResultSet(rs))
@@ -128,9 +129,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         }
     }
 
-    private fun loadNotes(): List<NoteEntry> = useConnection { conn ->
+    private fun loadNotes(includeArchived: Boolean = false): List<NoteEntry> = useConnection { conn ->
         conn.createStatement().use { stmt ->
-            stmt.executeQuery("SELECT * FROM notes WHERE archived = 0").use { rs ->
+            val whereClause = if (includeArchived) "" else " WHERE archived = 0"
+            stmt.executeQuery("SELECT * FROM notes$whereClause").use { rs ->
                 val list = mutableListOf<NoteEntry>()
                 while (rs.next()) {
                     list.add(noteFromResultSet(rs))
@@ -140,9 +142,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         }
     }
 
-    private fun loadTasks(): List<TaskEntry> = useConnection { conn ->
+    private fun loadTasks(includeArchived: Boolean = false): List<TaskEntry> = useConnection { conn ->
         conn.createStatement().use { stmt ->
-            stmt.executeQuery("SELECT * FROM tasks WHERE archived = 0").use { rs ->
+            val whereClause = if (includeArchived) "" else " WHERE archived = 0"
+            stmt.executeQuery("SELECT * FROM tasks$whereClause").use { rs ->
                 val list = mutableListOf<TaskEntry>()
                 while (rs.next()) {
                     list.add(taskFromResultSet(rs))
@@ -165,7 +168,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             updated = rs.getLong("updated"),
             color = rs.getString("color"),
             location = rs.getString("location"),
-            comment = rs.getString("comment")
+            comment = rs.getString("comment"),
+            archived = rs.getInt("archived") == 1
         )
     }
 
@@ -179,7 +183,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             created = rs.getLong("created"),
             updated = rs.getLong("updated"),
             color = rs.getString("color"),
-            location = rs.getString("location")
+            location = rs.getString("location"),
+            archived = rs.getInt("archived") == 1
         )
     }
 
@@ -200,13 +205,17 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             location = rs.getString("location"),
             subtasks = Json.decodeFromString(rs.getString("subtasks")),
             relatedEntries = Json.decodeFromString(rs.getString("related_entries")),
-            recurrenceRule = rs.getString("recurrence_rule")?.let { Json.decodeFromString(it) }
+            recurrenceRule = rs.getString("recurrence_rule")?.let { Json.decodeFromString(it) },
+            archived = rs.getInt("archived") == 1
         )
     }
 
-    override fun getAllJournals(): Flow<List<JournalEntry>> = _journals.asStateFlow()
-    override fun getAllNotes(): Flow<List<NoteEntry>> = _notes.asStateFlow()
-    override fun getAllTasks(): Flow<List<TaskEntry>> = _tasks.asStateFlow()
+    override fun getAllJournals(includeArchived: Boolean): Flow<List<JournalEntry>> =
+        _journals.map { journals -> if (includeArchived) journals else journals.filter { !it.archived } }
+    override fun getAllNotes(includeArchived: Boolean): Flow<List<NoteEntry>> =
+        _notes.map { notes -> if (includeArchived) notes else notes.filter { !it.archived } }
+    override fun getAllTasks(includeArchived: Boolean): Flow<List<TaskEntry>> =
+        _tasks.map { tasks -> if (includeArchived) tasks else tasks.filter { !it.archived } }
 
     override suspend fun getJournalById(id: String): JournalEntry? = withContext(Dispatchers.IO) {
         useConnection { conn ->
@@ -246,7 +255,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO journals
                    (id, uid, title, description, dtstart, dtend, categories, created, updated, color, location, comment, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"""
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -260,10 +269,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(10, entry.color)
                 ps.setString(11, entry.location)
                 ps.setString(12, entry.comment)
+                ps.setInt(13, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
-        _journals.value = loadJournals()
+        _journals.value = loadJournals(includeArchived = true)
     }
 
     override suspend fun insertNote(entry: NoteEntry) = withContext(Dispatchers.IO) {
@@ -271,7 +281,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO notes
                    (id, uid, title, description, categories, created, updated, color, location, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"""
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -282,10 +292,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setLong(7, entry.updated)
                 ps.setString(8, entry.color)
                 ps.setString(9, entry.location)
+                ps.setInt(10, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
-        _notes.value = loadNotes()
+        _notes.value = loadNotes(includeArchived = true)
     }
 
     override suspend fun insertTask(entry: TaskEntry) = withContext(Dispatchers.IO) {
@@ -293,7 +304,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO tasks
                    (id, uid, title, description, due, start, completed, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"""
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -311,10 +322,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(14, Json.encodeToString(entry.subtasks))
                 ps.setString(15, Json.encodeToString(entry.relatedEntries))
                 ps.setString(16, entry.recurrenceRule?.let { Json.encodeToString(it) })
+                ps.setInt(17, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
-        _tasks.value = loadTasks()
+        _tasks.value = loadTasks(includeArchived = true)
     }
 
     override suspend fun updateJournal(entry: JournalEntry) {
@@ -336,7 +348,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.executeUpdate()
             }
         }
-        _journals.value = loadJournals()
+        _journals.value = loadJournals(includeArchived = true)
     }
 
     override suspend fun deleteNote(id: String) = withContext(Dispatchers.IO) {
@@ -346,7 +358,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.executeUpdate()
             }
         }
-        _notes.value = loadNotes()
+        _notes.value = loadNotes(includeArchived = true)
     }
 
     override suspend fun deleteTask(id: String) = withContext(Dispatchers.IO) {
@@ -356,7 +368,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.executeUpdate()
             }
         }
-        _tasks.value = loadTasks()
+        _tasks.value = loadTasks(includeArchived = true)
     }
 
     override suspend fun getSettings(): AppSettings = withContext(Dispatchers.IO) {
@@ -441,7 +453,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.executeUpdate()
             }
         }
-        _journals.value = loadJournals()
+        _journals.value = loadJournals(includeArchived = true)
     }
 
     suspend fun permanentlyDeleteNote(id: String) = withContext(Dispatchers.IO) {
@@ -451,7 +463,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.executeUpdate()
             }
         }
-        _notes.value = loadNotes()
+        _notes.value = loadNotes(includeArchived = true)
     }
 
     suspend fun permanentlyDeleteTask(id: String) = withContext(Dispatchers.IO) {
@@ -461,7 +473,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.executeUpdate()
             }
         }
-        _tasks.value = loadTasks()
+        _tasks.value = loadTasks(includeArchived = true)
     }
 
     suspend fun restoreFromArchive(type: EntryType, id: String) = withContext(Dispatchers.IO) {
