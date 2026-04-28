@@ -275,9 +275,10 @@ fun SettingsScreen(
                                     SortOrder.MODIFIED_DESC -> SortPreference(SortField.MODIFIED, false)
                                     SortOrder.MODIFIED_ASC -> SortPreference(SortField.MODIFIED, true)
                                 },
-                                kanbanColumns = kanbanColumns
+                                kanbanColumns = kanbanColumns.normalizedKanbanColumns()
                             )
                         )
+                        kanbanColumns = kanbanColumns.normalizedKanbanColumns()
                         isSaving = false
                         syncMessage = "Settings saved"
                     }
@@ -419,20 +420,43 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     kanbanColumns.forEachIndexed { index, column ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = column.title,
-                                onValueChange = { newTitle ->
-                                    kanbanColumns = kanbanColumns.toMutableList().apply {
-                                        set(index, column.copy(title = newTitle))
-                                    }
-                                },
-                                label = { Text("Column ${index + 1} Title") },
-                                modifier = Modifier.weight(1f)
-                            )
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                OutlinedTextField(
+                                    value = column.title,
+                                    onValueChange = { newTitle ->
+                                        kanbanColumns = kanbanColumns.toMutableList().apply {
+                                            set(index, column.copy(title = newTitle))
+                                        }
+                                    },
+                                    label = { Text("Column ${index + 1} Title") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(
+                                        value = column.progressMin.toString(),
+                                        onValueChange = { value ->
+                                            kanbanColumns = kanbanColumns.toMutableList().apply {
+                                                set(index, column.copy(progressMin = value.toIntOrNull()?.coerceIn(0, 100) ?: 0))
+                                            }
+                                        },
+                                        label = { Text("Min %") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    OutlinedTextField(
+                                        value = column.progressMax.toString(),
+                                        onValueChange = { value ->
+                                            kanbanColumns = kanbanColumns.toMutableList().apply {
+                                                set(index, column.copy(progressMax = value.toIntOrNull()?.coerceIn(0, 100) ?: 0))
+                                            }
+                                        },
+                                        label = { Text("Max %") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
                             IconButton(onClick = {
                                 kanbanColumns = kanbanColumns.toMutableList().apply {
                                     removeAt(index)
@@ -638,6 +662,21 @@ private fun CollectionCapabilityCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+private fun List<KanbanColumnConfig>.normalizedKanbanColumns(): List<KanbanColumnConfig> {
+    return if (isEmpty()) {
+        defaultKanbanColumns
+    } else {
+        map { column ->
+            val min = column.progressMin.coerceIn(0, 100)
+            val max = column.progressMax.coerceIn(0, 100)
+            column.copy(
+                progressMin = min.coerceAtMost(max),
+                progressMax = max.coerceAtLeast(min)
+            )
         }
     }
 }

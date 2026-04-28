@@ -42,7 +42,7 @@ fun KanbanScreen(
 ) {
     var columns by remember {
         mutableStateOf(
-            kanbanColumns.ifEmpty { defaultColumns }.map { config ->
+            kanbanColumns.normalizedColumns().map { config ->
                 KanbanColumn(config, emptyList())
             }
         )
@@ -50,11 +50,7 @@ fun KanbanScreen(
 
     LaunchedEffect(Unit, kanbanColumns) {
         repository.getAllCombined().collect { tasks ->
-            val updatedColumns = if (kanbanColumns.isEmpty()) {
-                defaultColumns
-            } else {
-                kanbanColumns
-            }.map { config ->
+            val updatedColumns = kanbanColumns.normalizedColumns().map { config ->
                 val columnTasks = tasks.filter { task ->
                     val progress = task.progress ?: 0
                     progress >= config.progressMin && progress <= config.progressMax
@@ -296,6 +292,18 @@ private fun progressForColumn(config: KanbanColumnConfig): Int = when {
     config.progressMax <= 0 -> 0
     config.progressMin >= 100 -> 100
     else -> ((config.progressMin + config.progressMax) / 2).coerceIn(0, 100)
+}
+
+private fun List<KanbanColumnConfig>.normalizedColumns(): List<KanbanColumnConfig> {
+    val source = if (isEmpty()) defaultColumns else this
+    return source.map { config ->
+        val min = config.progressMin.coerceIn(0, 100)
+        val max = config.progressMax.coerceIn(0, 100)
+        config.copy(
+            progressMin = min.coerceAtMost(max),
+            progressMax = max.coerceAtLeast(min)
+        )
+    }
 }
 
 private fun formatDate(timestamp: Long): String {
