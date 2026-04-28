@@ -1,7 +1,12 @@
 package com.jtx.desktop.ui.desktop
 
 import androidx.compose.ui.input.key.KeyEvent
+import java.awt.MenuBar
+import java.awt.Menu
+import java.awt.MenuItem
+import java.awt.MenuShortcut
 import java.awt.event.KeyEvent as AWTKeyEvent
+import java.awt.event.ActionListener
 
 data class KeyboardShortcut(
     val keyCode: Int,
@@ -47,4 +52,70 @@ class ShortcutManager(
         }
         return false
     }
+}
+
+fun createAppMenuBar(
+    onNewEntry: () -> Unit,
+    onSync: () -> Unit,
+    onImport: () -> Unit,
+    onExport: () -> Unit,
+    onQuit: () -> Unit,
+    onShowJournals: () -> Unit,
+    onShowNotes: () -> Unit,
+    onShowTasks: () -> Unit,
+    onShowKanban: () -> Unit,
+    onShowSettings: () -> Unit,
+    onAbout: () -> Unit
+): MenuBar {
+    val menuBar = MenuBar()
+
+    val fileMenu = Menu("File")
+    val newEntryItem = MenuItem("New Entry", MenuShortcut(AWTKeyEvent.VK_N))
+    newEntryItem.addActionListener { onNewEntry() }
+    fileMenu.add(newEntryItem)
+    fileMenu.addSeparator()
+    val importItem = MenuItem("Import...")
+    importItem.addActionListener { onImport() }
+    fileMenu.add(importItem)
+    val exportItem = MenuItem("Export...")
+    exportItem.addActionListener { onExport() }
+    fileMenu.add(exportItem)
+    fileMenu.addSeparator()
+    val quitItem = MenuItem("Quit", MenuShortcut(AWTKeyEvent.VK_Q))
+    quitItem.addActionListener { onQuit() }
+    fileMenu.add(quitItem)
+
+    val editMenu = Menu("Edit")
+    editMenu.add(MenuItem("Undo", MenuShortcut(AWTKeyEvent.VK_Z)))
+    editMenu.add(MenuItem("Redo", MenuShortcut(AWTKeyEvent.VK_Y)))
+
+    val viewMenu = Menu("View")
+    val journalsItem = MenuItem("Journals")
+    journalsItem.addActionListener { onShowJournals() }
+    viewMenu.add(journalsItem)
+    val notesItem = MenuItem("Notes")
+    notesItem.addActionListener { onShowNotes() }
+    viewMenu.add(notesItem)
+    val tasksItem = MenuItem("Tasks")
+    tasksItem.addActionListener { onShowTasks() }
+    viewMenu.add(tasksItem)
+    val kanbanItem = MenuItem("Kanban Board")
+    kanbanItem.addActionListener { onShowKanban() }
+    viewMenu.add(kanbanItem)
+    viewMenu.addSeparator()
+    val settingsItem = MenuItem("Settings...")
+    settingsItem.addActionListener { onShowSettings() }
+    viewMenu.add(settingsItem)
+
+    val helpMenu = Menu("Help")
+    val aboutItem = MenuItem("About jtxBoard")
+    aboutItem.addActionListener { onAbout() }
+    helpMenu.add(aboutItem)
+
+    menuBar.add(fileMenu)
+    menuBar.add(editMenu)
+    menuBar.add(viewMenu)
+    menuBar.add(helpMenu)
+
+    return menuBar
 }

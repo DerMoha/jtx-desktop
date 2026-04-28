@@ -9,7 +9,9 @@ import com.jtx.desktop.data.remote.ICalendarParser
 import com.jtx.desktop.data.repository.SyncRepository
 import com.jtx.desktop.ui.JtxApp
 import com.jtx.desktop.ui.desktop.TrayManager
+import com.jtx.desktop.ui.desktop.createAppMenuBar
 import java.awt.Dimension
+import javax.swing.JFrame
 
 var windowRef: java.awt.Window? = null
 var trayManagerRef: TrayManager? = null
@@ -35,6 +37,26 @@ fun main() = application {
     ) {
         window.minimumSize = Dimension(800, 600)
         windowRef = window
+
+        if (window is JFrame) {
+            val frame = window as JFrame
+            frame.menuBar = createAppMenuBar(
+                onNewEntry = { },
+                onSync = { },
+                onImport = { },
+                onExport = { },
+                onQuit = {
+                    trayManagerRef?.dispose()
+                    exitApplication()
+                },
+                onShowJournals = { },
+                onShowNotes = { },
+                onShowTasks = { },
+                onShowKanban = { },
+                onShowSettings = { },
+                onAbout = { }
+            )
+        }
 
         val tm = TrayManager(
             onSyncClick = {
