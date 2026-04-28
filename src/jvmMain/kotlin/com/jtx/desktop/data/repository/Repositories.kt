@@ -357,7 +357,11 @@ class SyncRepository(
         val settings = local.getSettings()
         val discoveredCollections = discoverCollections(credentials).getOrNull().orEmpty()
         val collectionMetadata = discoveredCollections.findCollection(collection) ?: local.getCollectionByUrl(collection)
-        val uploadResult = uploadLocalDeletes(credentials) + uploadLocalCreates(credentials, collection) + uploadLocalUpdates(credentials, collection)
+        val uploadResult = if (collectionMetadata?.readOnly == true) {
+            LocalUploadResult(0, 0, listOf("Collection is read-only; local changes remain queued"))
+        } else {
+            uploadLocalDeletes(credentials) + uploadLocalCreates(credentials, collection) + uploadLocalUpdates(credentials, collection)
+        }
         val fetchResult = calDavClient.fetchEntries(credentials, collection)
         return fetchResult.fold(
             onSuccess = { hrefs ->
