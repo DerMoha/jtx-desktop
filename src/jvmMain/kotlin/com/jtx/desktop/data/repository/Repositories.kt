@@ -244,14 +244,11 @@ class SyncRepository(
                 val failures = mutableListOf<String>()
                 val conflicts = mutableListOf<SyncConflictInfo>()
 
-                for (href in hrefs) {
-                    if (!settings.syncJournals && href.contains(".ics") && !href.contains("VTODO") && !href.contains("VJOURNAL") && !href.contains("VNOTE")) {
-                        continue
-                    }
-                    val fetchDataResult = calDavClient.fetchCalendarData(credentials, href)
-                    fetchDataResult.fold(
-                        onSuccess = { data ->
-                            val entry = parser.parseEntry(data)
+                val objectResult = calDavClient.fetchCalendarObjects(credentials, collection, hrefs)
+                objectResult.fold(
+                    onSuccess = { remoteObjects ->
+                        for (remoteObject in remoteObjects) {
+                            val entry = parser.parseEntry(remoteObject.data)
                             when (entry) {
                                 is JournalEntry -> if (settings.syncJournals) {
                                     val existing = local.getJournalById(entry.id)
@@ -262,7 +259,7 @@ class SyncRepository(
                                         local.insertJournal(entry)
                                         successCount++
                                     } else if (existing.updated > entry.updated && existing.title != entry.title) {
-                                        conflicts.add(SyncConflictInfo(existing, entry, href, existing.updated, entry.updated))
+                                        conflicts.add(SyncConflictInfo(existing, entry, remoteObject.href, existing.updated, entry.updated))
                                     } else {
                                         successCount++
                                     }
@@ -276,7 +273,7 @@ class SyncRepository(
                                         local.insertNote(entry)
                                         successCount++
                                     } else if (existing.updated > entry.updated && existing.title != entry.title) {
-                                        conflicts.add(SyncConflictInfo(existing, entry, href, existing.updated, entry.updated))
+                                        conflicts.add(SyncConflictInfo(existing, entry, remoteObject.href, existing.updated, entry.updated))
                                     } else {
                                         successCount++
                                     }
@@ -290,20 +287,20 @@ class SyncRepository(
                                         local.insertTask(entry)
                                         successCount++
                                     } else if (existing.updated > entry.updated && existing.title != entry.title) {
-                                        conflicts.add(SyncConflictInfo(existing, entry, href, existing.updated, entry.updated))
+                                        conflicts.add(SyncConflictInfo(existing, entry, remoteObject.href, existing.updated, entry.updated))
                                     } else {
                                         successCount++
                                     }
                                 }
                                 else -> {}
                             }
-                        },
-                        onFailure = { e ->
-                            failureCount++
-                            failures.add("Failed to fetch $href: ${e.message}")
                         }
-                    )
-                }
+                    },
+                    onFailure = { e ->
+                        failureCount += hrefs.size
+                        failures.add("Failed to fetch calendar objects: ${e.message}")
+                    }
+                )
                 local.saveSettings(settings.copy(lastSyncTime = System.currentTimeMillis()))
                 Result.success(SyncResult(successCount, failureCount, failures, conflicts))
             },

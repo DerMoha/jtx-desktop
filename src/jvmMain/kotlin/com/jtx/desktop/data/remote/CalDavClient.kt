@@ -15,6 +15,12 @@ class CalDavClient {
     private val maxRetries = 3
     private val baseDelayMs = 1000L
 
+    data class RemoteCalendarObject(
+        val href: String,
+        val etag: String?,
+        val data: String
+    )
+
     suspend fun fetchEntries(credentials: CalDavCredentials, collection: String): Result<List<String>> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
             val url = resolveUrl(credentials, collection)
@@ -109,6 +115,46 @@ class CalDavClient {
                 Result.success(data)
             } else {
                 Result.failure(Exception("HTTP $responseCode"))
+            }
+        }
+    }
+
+    suspend fun fetchCalendarObjects(
+        credentials: CalDavCredentials,
+        collection: String,
+        hrefs: List<String>
+    ): Result<List<RemoteCalendarObject>> = withContext(Dispatchers.IO) {
+        if (hrefs.isEmpty()) return@withContext Result.success(emptyList())
+        retryWithBackoff(maxRetries) {
+            val url = resolveUrl(credentials, collection)
+            val conn = url.openConnection() as HttpsURLConnection
+            conn.connectTimeout = connectTimeout
+            conn.readTimeout = readTimeout
+            conn.requestMethod = "REPORT"
+            conn.setRequestProperty("Content-Type", "application/xml; charset=utf-8")
+            conn.setRequestProperty("Depth", "0")
+            setAuth(conn, credentials)
+
+            val hrefXml = hrefs.joinToString("\n") { href ->
+                "<d:href>${href.escapeXml()}</d:href>"
+            }
+            val body = """<?xml version="1.0" encoding="utf-8"?>
+                <c:calendar-multiget xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+                    <d:prop>
+                        <d:getetag/>
+                        <c:calendar-data/>
+                    </d:prop>
+                    $hrefXml
+                </c:calendar-multiget>"""
+
+            conn.doOutput = true
+            conn.outputStream.write(body.toByteArray())
+
+            val responseCode = conn.responseCode
+            if (responseCode == 207) {
+                Result.success(parseCalendarObjects(conn.inputStream.bufferedReader().readText()))
+            } else {
+                Result.failure(Exception("HTTP $responseCode: ${conn.responseMessage}"))
             }
         }
     }
@@ -210,6 +256,18 @@ class CalDavClient {
         }.distinct()
     }
 
+    private fun parseCalendarObjects(xml: String): List<RemoteCalendarObject> {
+        return responseBlocks(xml).mapNotNull { response ->
+            val href = elementText(response, "href") ?: return@mapNotNull null
+            val data = rawElementText(response, "calendar-data") ?: return@mapNotNull null
+            RemoteCalendarObject(
+                href = href,
+                etag = elementText(response, "getetag"),
+                data = data
+            )
+        }
+    }
+
     private fun firstHrefInElement(xml: String, element: String): String? {
         val block = elementBlock(xml, element) ?: return null
         return elementText(block, "href")
@@ -260,8 +318,25 @@ class CalDavClient {
 
     private fun elementText(xml: String, element: String): String? = elementBlock(xml, element)
         ?.replace(Regex("<[^>]+>"), "")
+        ?.unescapeXml()
         ?.trim()
-        ?.takeIf { it.isNotEmpty() }
+
+    private fun rawElementText(xml: String, element: String): String? = Regex(
+        "<(?:\\w+:)?${Regex.escape(element)}\\b[^>]*>(.*?)</(?:\\w+:)?${Regex.escape(element)}>",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    ).find(xml)?.groupValues?.get(1)?.unescapeXml()?.trim()
+
+    private fun String.escapeXml(): String = replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
+
+    private fun String.unescapeXml(): String = replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
 }
 
 class ICalendarParser {
