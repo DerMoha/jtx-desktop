@@ -246,6 +246,13 @@ fun JtxApp(
                 snackbarMessage = "Configure sync settings first"
                 return@launch
             }
+            if (!NetworkMonitor.isNetworkAvailable()) {
+                isOffline = true
+                syncState = SyncState.ERROR
+                snackbarMessage = "Offline; local changes will sync when connection returns"
+                return@launch
+            }
+            isOffline = false
             syncState = SyncState.SYNCING
             val result = syncRepository.sync(credentials, collection)
             result.onSuccess { syncResult ->
@@ -479,6 +486,11 @@ fun JtxApp(
                 SyncScheduler.triggerSync(scope, 5000) {
                     settings?.credentials?.let { cred ->
                         settings?.collection?.let { col ->
+                            if (!NetworkMonitor.isNetworkAvailable()) {
+                                isOffline = true
+                                return@triggerSync
+                            }
+                            isOffline = false
                             syncState = SyncState.SYNCING
                             val result = syncRepository.sync(cred, col)
                             syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
@@ -490,6 +502,11 @@ fun JtxApp(
                 SyncScheduler.triggerSync(scope, 5000) {
                     settings?.credentials?.let { cred ->
                         settings?.collection?.let { col ->
+                            if (!NetworkMonitor.isNetworkAvailable()) {
+                                isOffline = true
+                                return@triggerSync
+                            }
+                            isOffline = false
                             syncState = SyncState.SYNCING
                             val result = syncRepository.sync(cred, col)
                             syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
@@ -501,6 +518,11 @@ fun JtxApp(
                 SyncScheduler.triggerSync(scope, 5000) {
                     settings?.credentials?.let { cred ->
                         settings?.collection?.let { col ->
+                            if (!NetworkMonitor.isNetworkAvailable()) {
+                                isOffline = true
+                                return@triggerSync
+                            }
+                            isOffline = false
                             syncState = SyncState.SYNCING
                             val result = syncRepository.sync(cred, col)
                             syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
@@ -515,6 +537,11 @@ fun JtxApp(
             SyncScheduler.schedulePeriodicSync(scope, interval) {
                 settings?.credentials?.let { cred ->
                     settings?.collection?.let { col ->
+                        if (!NetworkMonitor.isNetworkAvailable()) {
+                            isOffline = true
+                            return@schedulePeriodicSync
+                        }
+                        isOffline = false
                         syncState = SyncState.SYNCING
                         val result = syncRepository.sync(cred, col)
                         syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
