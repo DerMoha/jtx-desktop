@@ -125,6 +125,18 @@ data class CalDavCredentials(
 )
 
 @Serializable
+data class CalDavCollection(
+    val url: String,
+    val displayName: String,
+    val color: String? = null,
+    val supportedComponents: List<EntryType> = emptyList(),
+    val readOnly: Boolean = false,
+    val syncToken: String? = null,
+    val ctag: String? = null,
+    val lastSync: Long? = null
+)
+
+@Serializable
 data class AppSettings(
     val credentials: CalDavCredentials? = null,
     val collection: String? = null,

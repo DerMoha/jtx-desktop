@@ -29,6 +29,11 @@ interface LocalDataSource {
     suspend fun permanentlyDeleteNote(id: String)
     suspend fun permanentlyDeleteTask(id: String)
 
+    fun getAllCollections(): Flow<List<CalDavCollection>>
+    suspend fun getCollectionByUrl(url: String): CalDavCollection?
+    suspend fun upsertCollection(collection: CalDavCollection)
+    suspend fun deleteCollection(url: String)
+
     suspend fun getSettings(): AppSettings
     suspend fun saveSettings(settings: AppSettings)
 }

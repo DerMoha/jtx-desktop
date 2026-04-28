@@ -18,6 +18,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
     private var _journals = MutableStateFlow<List<JournalEntry>>(emptyList())
     private var _notes = MutableStateFlow<List<NoteEntry>>(emptyList())
     private var _tasks = MutableStateFlow<List<TaskEntry>>(emptyList())
+    private var _collections = MutableStateFlow<List<CalDavCollection>>(emptyList())
 
     private var settings = AppSettings()
     private var settingsChanged = true
@@ -91,6 +92,20 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 )
                 stmt.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS collections (
+                        url TEXT PRIMARY KEY,
+                        display_name TEXT NOT NULL,
+                        color TEXT,
+                        supported_components TEXT NOT NULL,
+                        read_only INTEGER NOT NULL DEFAULT 0,
+                        sync_token TEXT,
+                        ctag TEXT,
+                        last_sync INTEGER
+                    )
+                    """
+                )
+                stmt.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS settings (
                         key TEXT PRIMARY KEY,
                         value TEXT NOT NULL
@@ -114,6 +129,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         _journals.value = loadJournals(includeArchived = true)
         _notes.value = loadNotes(includeArchived = true)
         _tasks.value = loadTasks(includeArchived = true)
+        _collections.value = loadCollections()
     }
 
     private fun loadJournals(includeArchived: Boolean = false): List<JournalEntry> = useConnection { conn ->
@@ -210,12 +226,38 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         )
     }
 
+    private fun loadCollections(): List<CalDavCollection> = useConnection { conn ->
+        conn.createStatement().use { stmt ->
+            stmt.executeQuery("SELECT * FROM collections").use { rs ->
+                val list = mutableListOf<CalDavCollection>()
+                while (rs.next()) {
+                    list.add(collectionFromResultSet(rs))
+                }
+                list
+            }
+        }
+    }
+
+    private fun collectionFromResultSet(rs: ResultSet): CalDavCollection {
+        return CalDavCollection(
+            url = rs.getString("url"),
+            displayName = rs.getString("display_name"),
+            color = rs.getString("color"),
+            supportedComponents = Json.decodeFromString(rs.getString("supported_components")),
+            readOnly = rs.getInt("read_only") == 1,
+            syncToken = rs.getString("sync_token"),
+            ctag = rs.getString("ctag"),
+            lastSync = rs.getObject("last_sync") as? Long
+        )
+    }
+
     override fun getAllJournals(includeArchived: Boolean): Flow<List<JournalEntry>> =
         _journals.map { journals -> if (includeArchived) journals else journals.filter { !it.archived } }
     override fun getAllNotes(includeArchived: Boolean): Flow<List<NoteEntry>> =
         _notes.map { notes -> if (includeArchived) notes else notes.filter { !it.archived } }
     override fun getAllTasks(includeArchived: Boolean): Flow<List<TaskEntry>> =
         _tasks.map { tasks -> if (includeArchived) tasks else tasks.filter { !it.archived } }
+    override fun getAllCollections(): Flow<List<CalDavCollection>> = _collections
 
     override suspend fun getJournalById(id: String): JournalEntry? = withContext(Dispatchers.IO) {
         useConnection { conn ->
@@ -245,6 +287,17 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(1, id)
                 ps.executeQuery().use { rs ->
                     if (rs.next()) taskFromResultSet(rs) else null
+                }
+            }
+        }
+    }
+
+    override suspend fun getCollectionByUrl(url: String): CalDavCollection? = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("SELECT * FROM collections WHERE url = ?").use { ps ->
+                ps.setString(1, url)
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) collectionFromResultSet(rs) else null
                 }
             }
         }
@@ -341,6 +394,37 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         insertTask(entry)
     }
 
+    override suspend fun upsertCollection(collection: CalDavCollection) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement(
+                """INSERT OR REPLACE INTO collections
+                   (url, display_name, color, supported_components, read_only, sync_token, ctag, last_sync)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)"""
+            ).use { ps ->
+                ps.setString(1, collection.url)
+                ps.setString(2, collection.displayName)
+                ps.setString(3, collection.color)
+                ps.setString(4, Json.encodeToString(collection.supportedComponents))
+                ps.setInt(5, if (collection.readOnly) 1 else 0)
+                ps.setString(6, collection.syncToken)
+                ps.setString(7, collection.ctag)
+                ps.setObject(8, collection.lastSync)
+                ps.executeUpdate()
+            }
+        }
+        _collections.value = loadCollections()
+    }
+
+    override suspend fun deleteCollection(url: String) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("DELETE FROM collections WHERE url = ?").use { ps ->
+                ps.setString(1, url)
+                ps.executeUpdate()
+            }
+        }
+        _collections.value = loadCollections()
+    }
+
     override suspend fun deleteJournal(id: String) = withContext(Dispatchers.IO) {
         useConnection { conn ->
             conn.prepareStatement("UPDATE journals SET archived = 1 WHERE id = ?").use { ps ->
@@ -375,13 +459,13 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         settings
     }
 
-    override suspend fun saveSettings(newSettings: AppSettings) {
+    override suspend fun saveSettings(settings: AppSettings) {
         withContext(Dispatchers.IO) {
-            settings = newSettings
+            this@SqliteLocalDataSource.settings = settings
             settingsChanged = true
             useConnection { conn ->
                 conn.prepareStatement("INSERT OR REPLACE INTO settings (key, value) VALUES ('app_settings', ?)").use { ps ->
-                    ps.setString(1, Json.encodeToString(newSettings))
+                    ps.setString(1, Json.encodeToString(settings))
                     ps.executeUpdate()
                 }
             }
