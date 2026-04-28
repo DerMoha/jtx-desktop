@@ -19,7 +19,7 @@ object ReminderScheduler {
                 for (task in tasks) {
                     if (task.completed || task.due == null) continue
                     for (reminder in task.reminders) {
-                        val key = "${task.id}_${reminder.minutesBefore}"
+                        val key = "${task.id}_${task.due}_${reminder.minutesBefore}"
                         if (checkedTasks.contains(key)) continue
 
                         val dueTime = task.due

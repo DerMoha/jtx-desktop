@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import com.jtx.desktop.ui.desktop.TrayManager
 import com.jtx.desktop.ui.desktop.TrayStatus
+import com.jtx.desktop.ui.desktop.ReminderScheduler
 import com.jtx.desktop.ui.desktop.SyncScheduler
 import com.jtx.desktop.ui.desktop.NetworkMonitor
 import com.jtx.desktop.ui.theme.JtxBoardTheme
@@ -146,6 +147,7 @@ fun JtxApp(
     var syncConflicts by remember { mutableStateOf<List<SyncRepository.SyncConflictInfo>>(emptyList()) }
     var allEntries by remember { mutableStateOf<List<CombinedEntry>>(emptyList()) }
     var entryToOpen by remember { mutableStateOf<CombinedEntry?>(null) }
+    var reminderTasks by remember { mutableStateOf<List<TaskEntry>>(emptyList()) }
     val rootFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
@@ -161,6 +163,26 @@ fun JtxApp(
             taskRepository.getAllCombined(includeArchived = true)
         ) { journals, notes, tasks -> journals + notes + tasks }
             .collect { allEntries = it }
+    }
+
+    LaunchedEffect(Unit) {
+        taskRepository.getAll(includeArchived = false).collect { tasks ->
+            reminderTasks = tasks.filter { !it.archived && !it.completed && it.due != null && it.reminders.isNotEmpty() }
+        }
+    }
+
+    LaunchedEffect(reminderTasks) {
+        trayManager?.updateReminderCount(reminderTasks.sumOf { it.reminders.size })
+        ReminderScheduler.scheduleReminders(scope, reminderTasks) { task, reminder ->
+            val title = task.title.ifBlank { "Task reminder" }
+            val message = if (reminder.minutesBefore > 0) {
+                "Due in ${reminder.minutesBefore} minutes"
+            } else {
+                "Due now"
+            }
+            ReminderScheduler.showDesktopNotification(title, message, trayManager)
+            snackbarMessage = "$title: $message"
+        }
     }
 
     fun createNewEntry(
