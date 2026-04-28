@@ -254,13 +254,16 @@ class SyncRepository(
                                     val existing = local.getJournalById(entry.id)
                                     if (existing == null) {
                                         local.insertJournal(entry)
+                                        storeRemoteMetadata(entry, remoteObject, collection)
                                         successCount++
                                     } else if (existing.updated < entry.updated) {
                                         local.insertJournal(entry)
+                                        storeRemoteMetadata(entry, remoteObject, collection)
                                         successCount++
                                     } else if (existing.updated > entry.updated && existing.title != entry.title) {
                                         conflicts.add(SyncConflictInfo(existing, entry, remoteObject.href, existing.updated, entry.updated))
                                     } else {
+                                        storeRemoteMetadata(entry, remoteObject, collection)
                                         successCount++
                                     }
                                 }
@@ -268,13 +271,16 @@ class SyncRepository(
                                     val existing = local.getNoteById(entry.id)
                                     if (existing == null) {
                                         local.insertNote(entry)
+                                        storeRemoteMetadata(entry, remoteObject, collection)
                                         successCount++
                                     } else if (existing.updated < entry.updated) {
                                         local.insertNote(entry)
+                                        storeRemoteMetadata(entry, remoteObject, collection)
                                         successCount++
                                     } else if (existing.updated > entry.updated && existing.title != entry.title) {
                                         conflicts.add(SyncConflictInfo(existing, entry, remoteObject.href, existing.updated, entry.updated))
                                     } else {
+                                        storeRemoteMetadata(entry, remoteObject, collection)
                                         successCount++
                                     }
                                 }
@@ -282,13 +288,16 @@ class SyncRepository(
                                     val existing = local.getTaskById(entry.id)
                                     if (existing == null) {
                                         local.insertTask(entry)
+                                        storeRemoteMetadata(entry, remoteObject, collection)
                                         successCount++
                                     } else if (existing.updated < entry.updated) {
                                         local.insertTask(entry)
+                                        storeRemoteMetadata(entry, remoteObject, collection)
                                         successCount++
                                     } else if (existing.updated > entry.updated && existing.title != entry.title) {
                                         conflicts.add(SyncConflictInfo(existing, entry, remoteObject.href, existing.updated, entry.updated))
                                     } else {
+                                        storeRemoteMetadata(entry, remoteObject, collection)
                                         successCount++
                                     }
                                 }
@@ -305,6 +314,72 @@ class SyncRepository(
                 Result.success(SyncResult(successCount, failureCount, failures, conflicts))
             },
             onFailure = { Result.failure(it) }
+        )
+    }
+
+    private suspend fun storeRemoteMetadata(
+        entry: JournalEntry,
+        remoteObject: CalDavClient.RemoteCalendarObject,
+        collection: String
+    ) {
+        local.upsertObjectSyncMetadata(
+            ObjectSyncMetadata(
+                entryId = entry.id,
+                entryType = EntryType.JOURNAL,
+                collectionUrl = collection,
+                href = remoteObject.href,
+                filename = remoteObject.href.substringAfterLast('/'),
+                etag = remoteObject.etag,
+                dirty = false,
+                deleted = false,
+                uid = entry.uid,
+                sequence = entry.sequence,
+                lastModified = entry.updated
+            )
+        )
+    }
+
+    private suspend fun storeRemoteMetadata(
+        entry: NoteEntry,
+        remoteObject: CalDavClient.RemoteCalendarObject,
+        collection: String
+    ) {
+        local.upsertObjectSyncMetadata(
+            ObjectSyncMetadata(
+                entryId = entry.id,
+                entryType = EntryType.NOTE,
+                collectionUrl = collection,
+                href = remoteObject.href,
+                filename = remoteObject.href.substringAfterLast('/'),
+                etag = remoteObject.etag,
+                dirty = false,
+                deleted = false,
+                uid = entry.uid,
+                sequence = entry.sequence,
+                lastModified = entry.updated
+            )
+        )
+    }
+
+    private suspend fun storeRemoteMetadata(
+        entry: TaskEntry,
+        remoteObject: CalDavClient.RemoteCalendarObject,
+        collection: String
+    ) {
+        local.upsertObjectSyncMetadata(
+            ObjectSyncMetadata(
+                entryId = entry.id,
+                entryType = EntryType.TASK,
+                collectionUrl = collection,
+                href = remoteObject.href,
+                filename = remoteObject.href.substringAfterLast('/'),
+                etag = remoteObject.etag,
+                dirty = false,
+                deleted = false,
+                uid = entry.uid,
+                sequence = entry.sequence,
+                lastModified = entry.updated
+            )
         )
     }
 
