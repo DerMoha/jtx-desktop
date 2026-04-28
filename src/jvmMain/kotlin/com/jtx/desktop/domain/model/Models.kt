@@ -248,7 +248,8 @@ data class AppSettings(
     val syncJournals: Boolean = true,
     val syncNotes: Boolean = true,
     val syncTasks: Boolean = true,
-    val pendingSyncCount: Int = 0
+    val pendingSyncCount: Int = 0,
+    val savedFilters: List<SavedFilter> = emptyList()
 )
 
 @Serializable
@@ -306,12 +307,15 @@ data class Tag(
 data class SavedFilter(
     val id: String,
     val name: String,
+    val query: String = "",
     val entryType: EntryType? = null,
     val categories: List<String> = emptyList(),
     val priorities: List<Priority> = emptyList(),
     val completed: Boolean? = null,
     val dateFrom: Long? = null,
-    val dateTo: Long? = null
+    val dateTo: Long? = null,
+    val includeArchived: Boolean = false,
+    val modifiedOnly: Boolean = false
 )
 
 enum class SyncState {

@@ -853,6 +853,15 @@ fun JtxApp(
         if (showGlobalSearch) {
             GlobalSearchDialog(
                 entries = allEntries,
+                savedFilters = settings?.savedFilters.orEmpty(),
+                onSaveFilter = { filter ->
+                    val current = settings ?: AppSettings()
+                    val updated = current.copy(
+                        savedFilters = current.savedFilters.filterNot { it.id == filter.id } + filter
+                    )
+                    settings = updated
+                    scope.launch { syncRepository.saveSettings(updated) }
+                },
                 onDismiss = { showGlobalSearch = false },
                 onOpenEntry = { entry ->
                     selectedTab = entry.type.toTab()
@@ -943,10 +952,13 @@ private fun Any.conflictTitle(): String = when (this) {
 @Composable
 private fun GlobalSearchDialog(
     entries: List<CombinedEntry>,
+    savedFilters: List<SavedFilter>,
+    onSaveFilter: (SavedFilter) -> Unit,
     onDismiss: () -> Unit,
     onOpenEntry: (CombinedEntry) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
+    var filterName by remember { mutableStateOf("") }
     var typeFilter by remember { mutableStateOf<EntryType?>(null) }
     var statusFilter by remember { mutableStateOf(TaskStatusFilter.ANY) }
     var priorityFilter by remember { mutableStateOf<Priority?>(null) }
@@ -1010,6 +1022,67 @@ private fun GlobalSearchDialog(
                             onClick = { typeFilter = if (typeFilter == type) null else type },
                             label = { Text(type.name.lowercase()) }
                         )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                if (savedFilters.isNotEmpty()) {
+                    Text("Saved filters", style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        savedFilters.take(6).forEach { filter ->
+                            FilterChip(
+                                selected = false,
+                                onClick = {
+                                    query = filter.query
+                                    typeFilter = filter.entryType
+                                    statusFilter = filter.completed?.let { if (it) TaskStatusFilter.COMPLETED else TaskStatusFilter.PENDING }
+                                        ?: TaskStatusFilter.ANY
+                                    priorityFilter = filter.priorities.firstOrNull()
+                                    categoryFilter = filter.categories.firstOrNull().orEmpty()
+                                    dueFrom = filter.dateFrom?.toString().orEmpty()
+                                    dueTo = filter.dateTo?.toString().orEmpty()
+                                    includeArchived = filter.includeArchived
+                                    modifiedOnly = filter.modifiedOnly
+                                },
+                                label = { Text(filter.name) }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = filterName,
+                        onValueChange = { filterName = it },
+                        label = { Text("Filter name") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        onClick = {
+                            val name = filterName.ifBlank { query.ifBlank { "Saved filter" } }
+                            onSaveFilter(
+                                SavedFilter(
+                                    id = UUID.randomUUID().toString(),
+                                    name = name,
+                                    query = query,
+                                    entryType = typeFilter,
+                                    categories = categoryFilter.takeIf { it.isNotBlank() }?.let { listOf(it) }.orEmpty(),
+                                    priorities = priorityFilter?.let { listOf(it) }.orEmpty(),
+                                    completed = when (statusFilter) {
+                                        TaskStatusFilter.ANY -> null
+                                        TaskStatusFilter.PENDING -> false
+                                        TaskStatusFilter.COMPLETED -> true
+                                    },
+                                    dateFrom = dueFrom.parseMillisFilter(),
+                                    dateTo = dueTo.parseMillisFilter(),
+                                    includeArchived = includeArchived,
+                                    modifiedOnly = modifiedOnly
+                                )
+                            )
+                            filterName = ""
+                        }
+                    ) {
+                        Text("Save")
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
