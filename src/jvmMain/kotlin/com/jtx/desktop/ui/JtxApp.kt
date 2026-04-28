@@ -53,6 +53,7 @@ import java.awt.FileDialog
 import java.io.File
 import java.io.FilenameFilter
 import java.awt.event.KeyEvent as AWTKeyEvent
+import java.time.LocalTime
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
@@ -219,7 +220,9 @@ fun JtxApp(
             } else {
                 "Due now"
             }
-            ReminderScheduler.showDesktopNotification(title, message, trayManager)
+            if ((settings ?: AppSettings()).allowsDesktopNotifications()) {
+                ReminderScheduler.showDesktopNotification(title, message, trayManager)
+            }
             snackbarMessage = "$title: $message"
             reminderActionTask = task
         }
@@ -1423,6 +1426,21 @@ private fun GlobalSearchDialog(
         }
     )
 }
+
+private fun AppSettings.allowsDesktopNotifications(now: LocalTime = LocalTime.now()): Boolean {
+    if (!notificationsEnabled) return false
+    if (!quietHoursEnabled) return true
+    val start = quietHoursStart.toLocalTimeOrNull() ?: return true
+    val end = quietHoursEnd.toLocalTimeOrNull() ?: return true
+    val inQuietHours = if (start <= end) {
+        now >= start && now < end
+    } else {
+        now >= start || now < end
+    }
+    return !inQuietHours
+}
+
+private fun String.toLocalTimeOrNull(): LocalTime? = runCatching { LocalTime.parse(this) }.getOrNull()
 
 @Composable
 private fun KeyboardShortcutsDialog(onDismiss: () -> Unit) {

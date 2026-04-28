@@ -59,6 +59,10 @@ fun SettingsScreen(
     var showExportDialog by remember { mutableStateOf(false) }
     var showKanbanConfig by remember { mutableStateOf(false) }
     var kanbanColumns by remember { mutableStateOf(settings.kanbanColumns) }
+    var notificationsEnabled by remember { mutableStateOf(settings.notificationsEnabled) }
+    var quietHoursEnabled by remember { mutableStateOf(settings.quietHoursEnabled) }
+    var quietHoursStart by remember { mutableStateOf(settings.quietHoursStart) }
+    var quietHoursEnd by remember { mutableStateOf(settings.quietHoursEnd) }
 
     LaunchedEffect(Unit) {
         settings = syncRepository.getSettings()
@@ -69,6 +73,10 @@ fun SettingsScreen(
         }
         collection = settings.collection ?: ""
         kanbanColumns = settings.kanbanColumns
+        notificationsEnabled = settings.notificationsEnabled
+        quietHoursEnabled = settings.quietHoursEnabled
+        quietHoursStart = settings.quietHoursStart
+        quietHoursEnd = settings.quietHoursEnd
         discoveredCollections = syncRepository.localDataSource.getAllCollections().first()
         isLoading = false
     }
@@ -279,6 +287,64 @@ fun SettingsScreen(
             }
         }
 
+        HorizontalDivider()
+
+        Text(
+            text = "Notifications",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Desktop notifications", style = MaterialTheme.typography.labelLarge)
+                        Text("Show task reminder notifications outside the app", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = notificationsEnabled, onCheckedChange = { notificationsEnabled = it })
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Quiet hours", style = MaterialTheme.typography.labelLarge)
+                        Text("Suppress desktop notifications during this local time window", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = quietHoursEnabled, onCheckedChange = { quietHoursEnabled = it })
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = quietHoursStart,
+                        onValueChange = { quietHoursStart = it },
+                        label = { Text("Start") },
+                        supportingText = { Text("HH:mm") },
+                        singleLine = true,
+                        enabled = quietHoursEnabled,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = quietHoursEnd,
+                        onValueChange = { quietHoursEnd = it },
+                        label = { Text("End") },
+                        supportingText = { Text("HH:mm") },
+                        singleLine = true,
+                        enabled = quietHoursEnabled,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -304,7 +370,11 @@ fun SettingsScreen(
                                     SortOrder.MODIFIED_ASC -> SortPreference(SortField.MODIFIED, true)
                                 },
                                 listDensity = listDensity,
-                                kanbanColumns = kanbanColumns.normalizedKanbanColumns()
+                                kanbanColumns = kanbanColumns.normalizedKanbanColumns(),
+                                notificationsEnabled = notificationsEnabled,
+                                quietHoursEnabled = quietHoursEnabled,
+                                quietHoursStart = quietHoursStart,
+                                quietHoursEnd = quietHoursEnd
                             )
                         )
                         kanbanColumns = kanbanColumns.normalizedKanbanColumns()

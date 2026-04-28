@@ -252,7 +252,11 @@ data class AppSettings(
     val pendingSyncCount: Int = 0,
     val savedFilters: List<SavedFilter> = emptyList(),
     val listDensity: ListDensity = ListDensity.COMFORTABLE,
-    val collectionFilter: String? = null
+    val collectionFilter: String? = null,
+    val notificationsEnabled: Boolean = true,
+    val quietHoursEnabled: Boolean = false,
+    val quietHoursStart: String = "22:00",
+    val quietHoursEnd: String = "07:00"
 )
 
 @Serializable
