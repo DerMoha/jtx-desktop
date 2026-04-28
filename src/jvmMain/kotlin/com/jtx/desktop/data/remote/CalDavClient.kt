@@ -140,6 +140,11 @@ class CalDavClient {
 
 class ICalendarParser {
 
+    private val commonKnownProperties = listOf(
+        "BEGIN", "END", "VERSION", "PRODID", "UID", "DTSTAMP", "LAST-MODIFIED", "SUMMARY", "DESCRIPTION",
+        "CATEGORIES", "CREATED", "COLOR", "X-APPLE-STRUCTURED-LOCATION", "RELATED-TO", "ATTACH"
+    )
+
     private fun unfoldLines(lines: List<String>): List<String> {
         val result = mutableListOf<String>()
         var current = StringBuilder()
@@ -176,8 +181,11 @@ class ICalendarParser {
             var relatedEntries = emptyList<String>()
             var attachments = emptyList<EntryAttachment>()
             var comments = emptyList<EntryComment>()
+            var unknownProperties = emptyList<UnknownProperty>()
+            val knownProperties = commonKnownProperties + listOf("DTSTART", "DTEND", "COMMENT")
 
             for (line in lines) {
+                if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
                 when {
                     line.startsWith("UID:") -> uid = line.substringAfter("UID:").trim()
                     line.startsWith("SUMMARY:") -> summary = line.substringAfter("SUMMARY:").trim()
@@ -211,7 +219,7 @@ class ICalendarParser {
                 updated = dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, comment = comment,
                 relatedEntries = relatedEntries, attachments = attachments,
-                comments = comments
+                comments = comments, unknownProperties = unknownProperties
             )
         } catch (e: Exception) { null }
     }
@@ -241,8 +249,14 @@ class ICalendarParser {
             var recurrenceId: Long? = null
             var recurrenceTimezone: String? = null
             var recurrenceIdTimezone: String? = null
+            var unknownProperties = emptyList<UnknownProperty>()
+            val knownProperties = commonKnownProperties + listOf(
+                "DUE", "DTSTART", "STATUS", "PERCENT-COMPLETE", "PRIORITY", "RRULE", "RDATE", "EXDATE",
+                "RECURRENCE-ID", "LOCATION", "COMMENT"
+            )
 
             for (line in lines) {
+                if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
                 when {
                     line.startsWith("UID:") -> uid = line.substringAfter("UID:").trim()
                     line.startsWith("SUMMARY:") -> summary = line.substringAfter("SUMMARY:").trim()
@@ -290,7 +304,8 @@ class ICalendarParser {
                 priority = priority, recurrenceRule = recurrenceRule, recurrenceDates = recurrenceDates,
                 exceptionDates = exceptionDates, recurrenceId = recurrenceId,
                 recurrenceTimezone = recurrenceTimezone, recurrenceIdTimezone = recurrenceIdTimezone,
-                attachments = attachments, comments = comments
+                attachments = attachments, comments = comments,
+                unknownProperties = unknownProperties
             )
         } catch (e: Exception) { null }
     }
@@ -309,8 +324,11 @@ class ICalendarParser {
             var relatedEntries = emptyList<String>()
             var attachments = emptyList<EntryAttachment>()
             var comments = emptyList<EntryComment>()
+            var unknownProperties = emptyList<UnknownProperty>()
+            val knownProperties = commonKnownProperties + listOf("COMMENT")
 
             for (line in lines) {
+                if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
                 when {
                     line.startsWith("UID:") -> uid = line.substringAfter("UID:").trim()
                     line.startsWith("SUMMARY:") -> summary = line.substringAfter("SUMMARY:").trim()
@@ -336,7 +354,8 @@ class ICalendarParser {
                 categories = categories, created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, relatedEntries = relatedEntries,
-                attachments = attachments, comments = comments
+                attachments = attachments, comments = comments,
+                unknownProperties = unknownProperties
             )
         } catch (e: Exception) { null }
     }
@@ -360,6 +379,7 @@ class ICalendarParser {
                 .forEach { appendLine("COMMENT:${it.text}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
+            entry.unknownProperties.forEach { appendLine(it.line) }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VJOURNAL")
@@ -392,6 +412,7 @@ class ICalendarParser {
             entry.comments.forEach { appendLine("COMMENT:${it.text}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
+            entry.unknownProperties.forEach { appendLine(it.line) }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VTODO")
@@ -415,6 +436,7 @@ class ICalendarParser {
             entry.comments.forEach { appendLine("COMMENT:${it.text}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
+            entry.unknownProperties.forEach { appendLine(it.line) }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VNOTE")
@@ -450,6 +472,12 @@ class ICalendarParser {
             in 6..9 -> Priority.LOW
             else -> Priority.NONE
         }
+    }
+
+    private fun isUnknownContentLine(line: String, knownProperties: List<String>): Boolean {
+        if (!line.contains(":")) return false
+        val property = line.substringBefore(":").substringBefore(";").uppercase()
+        return knownProperties.none { it == property }
     }
 
     private fun parseRecurrenceRule(value: String): RecurrenceRule? {

@@ -49,6 +49,9 @@ interface LocalDataSource {
     suspend fun getCommentsForEntry(entryType: EntryType, entryId: String): List<EntryComment>
     suspend fun replaceEntryComments(entryType: EntryType, entryId: String, comments: List<EntryComment>)
 
+    suspend fun getUnknownPropertiesForEntry(entryType: EntryType, entryId: String): List<UnknownProperty>
+    suspend fun replaceEntryUnknownProperties(entryType: EntryType, entryId: String, properties: List<UnknownProperty>)
+
     suspend fun getSettings(): AppSettings
     suspend fun saveSettings(settings: AppSettings)
 }

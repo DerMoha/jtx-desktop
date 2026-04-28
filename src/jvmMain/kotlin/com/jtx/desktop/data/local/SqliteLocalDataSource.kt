@@ -181,6 +181,17 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 )
                 stmt.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS unknown_properties (
+                        entry_type TEXT NOT NULL,
+                        entry_id TEXT NOT NULL,
+                        position INTEGER NOT NULL,
+                        line TEXT NOT NULL,
+                        PRIMARY KEY (entry_type, entry_id, position)
+                    )
+                    """
+                )
+                stmt.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS settings (
                         key TEXT PRIMARY KEY,
                         value TEXT NOT NULL
@@ -292,6 +303,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             relatedEntries = Json.decodeFromString(rs.getString("related_entries")),
             attachments = loadEntryAttachments(EntryType.JOURNAL, rs.getString("id")),
             comments = loadEntryComments(EntryType.JOURNAL, rs.getString("id")),
+            unknownProperties = loadEntryUnknownProperties(EntryType.JOURNAL, rs.getString("id")),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -311,6 +323,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             relatedEntries = Json.decodeFromString(rs.getString("related_entries")),
             attachments = loadEntryAttachments(EntryType.NOTE, rs.getString("id")),
             comments = loadEntryComments(EntryType.NOTE, rs.getString("id")),
+            unknownProperties = loadEntryUnknownProperties(EntryType.NOTE, rs.getString("id")),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -346,7 +359,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             archived = rs.getInt("archived") == 1,
             reminders = loadTaskReminders(rs.getString("id")),
             attachments = loadEntryAttachments(EntryType.TASK, rs.getString("id")),
-            comments = loadEntryComments(EntryType.TASK, rs.getString("id"))
+            comments = loadEntryComments(EntryType.TASK, rs.getString("id")),
+            unknownProperties = loadEntryUnknownProperties(EntryType.TASK, rs.getString("id"))
         )
     }
 
@@ -406,6 +420,20 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                             created = if (rs.wasNull()) null else created
                         )
                     )
+                }
+                list
+            }
+        }
+    }
+
+    private fun loadEntryUnknownProperties(entryType: EntryType, entryId: String): List<UnknownProperty> = useConnection { conn ->
+        conn.prepareStatement("SELECT * FROM unknown_properties WHERE entry_type = ? AND entry_id = ? ORDER BY position").use { ps ->
+            ps.setString(1, entryType.name)
+            ps.setString(2, entryId)
+            ps.executeQuery().use { rs ->
+                val list = mutableListOf<UnknownProperty>()
+                while (rs.next()) {
+                    list.add(UnknownProperty(line = rs.getString("line")))
                 }
                 list
             }
@@ -560,6 +588,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             loadEntryComments(entryType, entryId)
         }
 
+    override suspend fun getUnknownPropertiesForEntry(entryType: EntryType, entryId: String): List<UnknownProperty> =
+        withContext(Dispatchers.IO) {
+            loadEntryUnknownProperties(entryType, entryId)
+        }
+
     override suspend fun insertJournal(entry: JournalEntry) = withContext(Dispatchers.IO) {
         useConnection { conn ->
             conn.prepareStatement(
@@ -589,6 +622,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         }
         replaceEntryAttachments(EntryType.JOURNAL, entry.id, entry.attachments)
         replaceEntryComments(EntryType.JOURNAL, entry.id, entry.comments)
+        replaceEntryUnknownProperties(EntryType.JOURNAL, entry.id, entry.unknownProperties)
         _journals.value = loadJournals(includeArchived = true)
     }
 
@@ -616,6 +650,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         }
         replaceEntryAttachments(EntryType.NOTE, entry.id, entry.attachments)
         replaceEntryComments(EntryType.NOTE, entry.id, entry.comments)
+        replaceEntryUnknownProperties(EntryType.NOTE, entry.id, entry.unknownProperties)
         _notes.value = loadNotes(includeArchived = true)
     }
 
@@ -659,6 +694,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         replaceTaskReminders(entry.id, entry.reminders)
         replaceEntryAttachments(EntryType.TASK, entry.id, entry.attachments)
         replaceEntryComments(EntryType.TASK, entry.id, entry.comments)
+        replaceEntryUnknownProperties(EntryType.TASK, entry.id, entry.unknownProperties)
         _tasks.value = loadTasks(includeArchived = true)
     }
 
@@ -826,6 +862,34 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         }
     }
 
+    override suspend fun replaceEntryUnknownProperties(
+        entryType: EntryType,
+        entryId: String,
+        properties: List<UnknownProperty>
+    ): Unit = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("DELETE FROM unknown_properties WHERE entry_type = ? AND entry_id = ?").use { ps ->
+                ps.setString(1, entryType.name)
+                ps.setString(2, entryId)
+                ps.executeUpdate()
+            }
+            conn.prepareStatement(
+                """INSERT INTO unknown_properties
+                   (entry_type, entry_id, position, line)
+                   VALUES (?, ?, ?, ?)"""
+            ).use { ps ->
+                properties.forEachIndexed { index, property ->
+                    ps.setString(1, entryType.name)
+                    ps.setString(2, entryId)
+                    ps.setInt(3, index)
+                    ps.setString(4, property.line)
+                    ps.addBatch()
+                }
+                ps.executeBatch()
+            }
+        }
+    }
+
     override suspend fun deleteJournal(id: String) = withContext(Dispatchers.IO) {
         useConnection { conn ->
             conn.prepareStatement("UPDATE journals SET archived = 1 WHERE id = ?").use { ps ->
@@ -943,6 +1007,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(2, id)
                 ps.executeUpdate()
             }
+            conn.prepareStatement("DELETE FROM unknown_properties WHERE entry_type = ? AND entry_id = ?").use { ps ->
+                ps.setString(1, EntryType.JOURNAL.name)
+                ps.setString(2, id)
+                ps.executeUpdate()
+            }
             conn.prepareStatement("DELETE FROM journals WHERE id = ?").use { ps ->
                 ps.setString(1, id)
                 ps.executeUpdate()
@@ -959,6 +1028,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.executeUpdate()
             }
             conn.prepareStatement("DELETE FROM comments WHERE entry_type = ? AND entry_id = ?").use { ps ->
+                ps.setString(1, EntryType.NOTE.name)
+                ps.setString(2, id)
+                ps.executeUpdate()
+            }
+            conn.prepareStatement("DELETE FROM unknown_properties WHERE entry_type = ? AND entry_id = ?").use { ps ->
                 ps.setString(1, EntryType.NOTE.name)
                 ps.setString(2, id)
                 ps.executeUpdate()
@@ -983,6 +1057,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.executeUpdate()
             }
             conn.prepareStatement("DELETE FROM comments WHERE entry_type = ? AND entry_id = ?").use { ps ->
+                ps.setString(1, EntryType.TASK.name)
+                ps.setString(2, id)
+                ps.executeUpdate()
+            }
+            conn.prepareStatement("DELETE FROM unknown_properties WHERE entry_type = ? AND entry_id = ?").use { ps ->
                 ps.setString(1, EntryType.TASK.name)
                 ps.setString(2, id)
                 ps.executeUpdate()
