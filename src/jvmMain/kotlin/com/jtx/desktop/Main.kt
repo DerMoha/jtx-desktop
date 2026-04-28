@@ -89,9 +89,12 @@ fun main() = application {
 
         val tm = TrayManager(
             onSyncClick = {
+                menuAction = AppMenuAction.SYNC
             },
             onOpenClick = {
                 windowRef?.isVisible = true
+                windowRef?.toFront()
+                windowRef?.requestFocus()
             },
             onQuitClick = {
                 runBlocking {
