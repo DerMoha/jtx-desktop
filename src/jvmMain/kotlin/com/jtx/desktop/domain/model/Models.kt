@@ -10,7 +10,9 @@ data class JournalEntry(
     val description: String,
     val descriptionFormat: DescriptionFormat = DescriptionFormat.PLAIN,
     val dtstart: Long?,
+    val startTimezone: String? = null,
     val dtend: Long?,
+    val endTimezone: String? = null,
     val categories: List<String>,
     val created: Long,
     val updated: Long,
@@ -56,7 +58,12 @@ data class TaskEntry(
     val archived: Boolean = false,
     val reminders: List<Reminder> = emptyList(),
     val priority: Priority = Priority.NONE,
-    val timezone: String? = null
+    val timezone: String? = null,
+    val startTimezone: String? = null,
+    val dueTimezone: String? = null,
+    val completedTimezone: String? = null,
+    val recurrenceTimezone: String? = null,
+    val recurrenceIdTimezone: String? = null
 )
 
 @Serializable

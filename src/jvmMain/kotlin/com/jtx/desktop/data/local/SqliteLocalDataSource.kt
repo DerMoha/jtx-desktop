@@ -42,7 +42,9 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                         description TEXT NOT NULL,
                         description_format TEXT NOT NULL DEFAULT 'PLAIN',
                         dtstart INTEGER,
+                        dtstart_timezone TEXT,
                         dtend INTEGER,
+                        dtend_timezone TEXT,
                         categories TEXT NOT NULL,
                         created INTEGER NOT NULL,
                         updated INTEGER NOT NULL,
@@ -78,8 +80,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                         title TEXT NOT NULL,
                         description TEXT NOT NULL,
                         due INTEGER,
+                        due_timezone TEXT,
                         start INTEGER,
+                        start_timezone TEXT,
                         completed INTEGER NOT NULL,
+                        completed_timezone TEXT,
                         progress INTEGER NOT NULL,
                         categories TEXT NOT NULL,
                         created INTEGER NOT NULL,
@@ -89,7 +94,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                         subtasks TEXT NOT NULL,
                         related_entries TEXT NOT NULL,
                         recurrence_rule TEXT,
+                        recurrence_timezone TEXT,
+                        recurrence_id_timezone TEXT,
                         priority TEXT NOT NULL DEFAULT 'NONE',
+                        timezone TEXT,
                         archived INTEGER DEFAULT 0
                     )
                     """
@@ -136,8 +144,16 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                     """
                 )
                 addColumnIfMissing(stmt, "journals", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
+                addColumnIfMissing(stmt, "journals", "dtstart_timezone", "TEXT")
+                addColumnIfMissing(stmt, "journals", "dtend_timezone", "TEXT")
                 addColumnIfMissing(stmt, "notes", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
+                addColumnIfMissing(stmt, "tasks", "due_timezone", "TEXT")
+                addColumnIfMissing(stmt, "tasks", "start_timezone", "TEXT")
+                addColumnIfMissing(stmt, "tasks", "completed_timezone", "TEXT")
+                addColumnIfMissing(stmt, "tasks", "recurrence_timezone", "TEXT")
+                addColumnIfMissing(stmt, "tasks", "recurrence_id_timezone", "TEXT")
                 addColumnIfMissing(stmt, "tasks", "priority", "TEXT NOT NULL DEFAULT 'NONE'")
+                addColumnIfMissing(stmt, "tasks", "timezone", "TEXT")
             }
         }
     }
@@ -215,7 +231,9 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             description = rs.getString("description"),
             descriptionFormat = DescriptionFormat.valueOf(rs.getString("description_format")),
             dtstart = rs.getObject("dtstart") as? Long,
+            startTimezone = rs.getString("dtstart_timezone"),
             dtend = rs.getObject("dtend") as? Long,
+            endTimezone = rs.getString("dtend_timezone"),
             categories = Json.decodeFromString(rs.getString("categories")),
             created = rs.getLong("created"),
             updated = rs.getLong("updated"),
@@ -249,8 +267,11 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             title = rs.getString("title"),
             description = rs.getString("description"),
             due = rs.getObject("due") as? Long,
+            dueTimezone = rs.getString("due_timezone"),
             start = rs.getObject("start") as? Long,
+            startTimezone = rs.getString("start_timezone"),
             completed = rs.getInt("completed") == 1,
+            completedTimezone = rs.getString("completed_timezone"),
             progress = rs.getInt("progress"),
             categories = Json.decodeFromString(rs.getString("categories")),
             created = rs.getLong("created"),
@@ -260,7 +281,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             subtasks = Json.decodeFromString(rs.getString("subtasks")),
             relatedEntries = Json.decodeFromString(rs.getString("related_entries")),
             recurrenceRule = rs.getString("recurrence_rule")?.let { Json.decodeFromString(it) },
+            recurrenceTimezone = rs.getString("recurrence_timezone"),
+            recurrenceIdTimezone = rs.getString("recurrence_id_timezone"),
             priority = Priority.valueOf(rs.getString("priority")),
+            timezone = rs.getString("timezone"),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -403,8 +427,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO journals
-                   (id, uid, title, description, description_format, dtstart, dtend, categories, created, updated, color, location, comment, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, description_format, dtstart, dtstart_timezone, dtend, dtend_timezone, categories, created, updated, color, location, comment, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -412,14 +436,16 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(4, entry.description)
                 ps.setString(5, entry.descriptionFormat.name)
                 ps.setObject(6, entry.dtstart)
-                ps.setObject(7, entry.dtend)
-                ps.setString(8, Json.encodeToString(entry.categories))
-                ps.setLong(9, entry.created)
-                ps.setLong(10, entry.updated)
-                ps.setString(11, entry.color)
-                ps.setString(12, entry.location)
-                ps.setString(13, entry.comment)
-                ps.setInt(14, if (entry.archived) 1 else 0)
+                ps.setString(7, entry.startTimezone)
+                ps.setObject(8, entry.dtend)
+                ps.setString(9, entry.endTimezone)
+                ps.setString(10, Json.encodeToString(entry.categories))
+                ps.setLong(11, entry.created)
+                ps.setLong(12, entry.updated)
+                ps.setString(13, entry.color)
+                ps.setString(14, entry.location)
+                ps.setString(15, entry.comment)
+                ps.setInt(16, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }
@@ -454,27 +480,33 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO tasks
-                   (id, uid, title, description, due, start, completed, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, priority, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, due, due_timezone, start, start_timezone, completed, completed_timezone, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, recurrence_timezone, recurrence_id_timezone, priority, timezone, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
                 ps.setString(3, entry.title)
                 ps.setString(4, entry.description)
                 ps.setObject(5, entry.due)
-                ps.setObject(6, entry.start)
-                ps.setInt(7, if (entry.completed) 1 else 0)
-                ps.setInt(8, entry.progress)
-                ps.setString(9, Json.encodeToString(entry.categories))
-                ps.setLong(10, entry.created)
-                ps.setLong(11, entry.updated)
-                ps.setString(12, entry.color)
-                ps.setString(13, entry.location)
-                ps.setString(14, Json.encodeToString(entry.subtasks))
-                ps.setString(15, Json.encodeToString(entry.relatedEntries))
-                ps.setString(16, entry.recurrenceRule?.let { Json.encodeToString(it) })
-                ps.setString(17, entry.priority.name)
-                ps.setInt(18, if (entry.archived) 1 else 0)
+                ps.setString(6, entry.dueTimezone)
+                ps.setObject(7, entry.start)
+                ps.setString(8, entry.startTimezone)
+                ps.setInt(9, if (entry.completed) 1 else 0)
+                ps.setString(10, entry.completedTimezone)
+                ps.setInt(11, entry.progress)
+                ps.setString(12, Json.encodeToString(entry.categories))
+                ps.setLong(13, entry.created)
+                ps.setLong(14, entry.updated)
+                ps.setString(15, entry.color)
+                ps.setString(16, entry.location)
+                ps.setString(17, Json.encodeToString(entry.subtasks))
+                ps.setString(18, Json.encodeToString(entry.relatedEntries))
+                ps.setString(19, entry.recurrenceRule?.let { Json.encodeToString(it) })
+                ps.setString(20, entry.recurrenceTimezone)
+                ps.setString(21, entry.recurrenceIdTimezone)
+                ps.setString(22, entry.priority.name)
+                ps.setString(23, entry.timezone)
+                ps.setInt(24, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }

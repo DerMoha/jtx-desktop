@@ -256,23 +256,56 @@ fun JtxApp(
         when (entry.type) {
             EntryType.JOURNAL -> scope.launch {
                 journalRepository.insert(JournalEntry(
-                    entry.id, entry.id, entry.title, entry.description, DescriptionFormat.PLAIN,
-                    entry.date, null, entry.categories, entry.date ?: now, now,
-                    entry.color, null, null, entry.archived
+                    id = entry.id,
+                    uid = entry.id,
+                    title = entry.title,
+                    description = entry.description,
+                    descriptionFormat = DescriptionFormat.PLAIN,
+                    dtstart = entry.date,
+                    dtend = null,
+                    categories = entry.categories,
+                    created = entry.date ?: now,
+                    updated = now,
+                    color = entry.color,
+                    location = null,
+                    comment = null,
+                    archived = entry.archived
                 ))
             }
             EntryType.NOTE -> scope.launch {
                 noteRepository.insert(NoteEntry(
-                    entry.id, entry.id, entry.title, entry.description, DescriptionFormat.PLAIN,
-                    entry.categories, entry.date ?: now, now, entry.color, null, entry.archived
+                    id = entry.id,
+                    uid = entry.id,
+                    title = entry.title,
+                    description = entry.description,
+                    descriptionFormat = DescriptionFormat.PLAIN,
+                    categories = entry.categories,
+                    created = entry.date ?: now,
+                    updated = now,
+                    color = entry.color,
+                    location = null,
+                    archived = entry.archived
                 ))
             }
             EntryType.TASK -> scope.launch {
                 taskRepository.insert(TaskEntry(
-                    entry.id, entry.id, entry.title, entry.description, entry.date, null,
-                    entry.completed ?: false, entry.progress ?: 0, entry.categories,
-                    entry.date ?: now, now, entry.color, null,
-                    emptyList(), emptyList(), null, entry.archived
+                    id = entry.id,
+                    uid = entry.id,
+                    title = entry.title,
+                    description = entry.description,
+                    due = entry.date,
+                    start = null,
+                    completed = entry.completed ?: false,
+                    progress = entry.progress ?: 0,
+                    categories = entry.categories,
+                    created = entry.date ?: now,
+                    updated = now,
+                    color = entry.color,
+                    location = null,
+                    subtasks = emptyList(),
+                    relatedEntries = emptyList(),
+                    recurrenceRule = null,
+                    archived = entry.archived
                 ))
             }
         }
