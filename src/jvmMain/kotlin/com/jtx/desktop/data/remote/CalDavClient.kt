@@ -693,7 +693,8 @@ class ICalendarParser {
             frequency = frequency,
             interval = parts["INTERVAL"]?.toIntOrNull() ?: 1,
             endDate = parts["UNTIL"]?.let { parseIcsDate("UNTIL:$it") },
-            count = parts["COUNT"]?.toIntOrNull()
+            count = parts["COUNT"]?.toIntOrNull(),
+            rawRule = value
         )
     }
 
@@ -805,6 +806,7 @@ class ICalendarParser {
     }
 
     private fun RecurrenceRule.toIcsRRule(): String {
+        if (!rawRule.isNullOrBlank()) return rawRule
         return buildString {
             append("FREQ=${frequency.name}")
             if (interval != 1) append(";INTERVAL=$interval")

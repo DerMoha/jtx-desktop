@@ -128,7 +128,8 @@ data class RecurrenceRule(
     val frequency: RecurrenceFrequency,
     val interval: Int = 1,
     val endDate: Long? = null,
-    val count: Int? = null
+    val count: Int? = null,
+    val rawRule: String? = null
 )
 
 @Serializable
