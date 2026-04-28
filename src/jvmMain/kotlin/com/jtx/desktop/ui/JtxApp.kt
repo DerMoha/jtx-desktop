@@ -21,8 +21,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
@@ -139,6 +141,7 @@ fun JtxApp(
 
     var selectedTab by remember { mutableStateOf(Tab.Journals) }
     var showNewDialog by remember { mutableStateOf(false) }
+    var showQuickEntryDialog by remember { mutableStateOf(false) }
     var refreshTrigger by remember { mutableStateOf(0) }
     var syncState by remember { mutableStateOf(SyncState.IDLE) }
     var darkModePreference by remember { mutableStateOf(DarkModePreference.SYSTEM) }
@@ -534,6 +537,7 @@ fun JtxApp(
         val isAlt = (modifiers and AWTKeyEvent.ALT_MASK) != 0
         when {
             isCtrlOrMeta && !isShift && !isAlt && keyCode == AWTKeyEvent.VK_N -> { showNewDialog = true; return true }
+            isCtrlOrMeta && isShift && !isAlt && keyCode == AWTKeyEvent.VK_N -> { showQuickEntryDialog = true; return true }
             isCtrlOrMeta && !isShift && !isAlt && keyCode == AWTKeyEvent.VK_S -> {
                 syncNow()
                 return true
@@ -546,6 +550,7 @@ fun JtxApp(
             isCtrlOrMeta && !isShift && !isAlt && keyCode == AWTKeyEvent.VK_COMMA -> { selectedTab = Tab.Settings; return true }
             keyCode == AWTKeyEvent.VK_ESCAPE -> {
                 showNewDialog = false
+                showQuickEntryDialog = false
                 searchFocused = false
                 focusManager.clearFocus()
                 return true
@@ -944,6 +949,21 @@ fun JtxApp(
                     showNewDialog = false
                 },
                 templates = templateRepository.getTemplates()
+            )
+        }
+
+        if (showQuickEntryDialog) {
+            QuickEntryDialog(
+                defaultType = when (selectedTab) {
+                    Tab.Tasks, Tab.Kanban -> EntryType.TASK
+                    Tab.Notes -> EntryType.NOTE
+                    Tab.Journals, Tab.Settings -> EntryType.JOURNAL
+                },
+                onDismiss = { showQuickEntryDialog = false },
+                onCreate = { type, title, description, categories ->
+                    createNewEntry(type, title, description, categories, null, null, null)
+                    showQuickEntryDialog = false
+                }
             )
         }
 
@@ -1383,6 +1403,97 @@ private fun CombinedEntry.matchesGlobalSearch(query: String): Boolean {
             location?.contains(term, ignoreCase = true) == true ||
             categories.any { it.contains(term, ignoreCase = true) }
     }
+}
+
+private data class QuickEntryDraft(
+    val type: EntryType,
+    val title: String,
+    val description: String,
+    val categories: List<String>
+)
+
+@Composable
+private fun QuickEntryDialog(
+    defaultType: EntryType,
+    onDismiss: () -> Unit,
+    onCreate: (EntryType, String, String, List<String>) -> Unit
+) {
+    var text by remember { mutableStateOf("") }
+    val draft = remember(text, defaultType) { text.toQuickEntryDraft(defaultType) }
+    fun submit() {
+        draft?.let { onCreate(it.type, it.title, it.description, it.categories) }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Quick Entry") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Entry") },
+                    placeholder = { Text("task: Buy milk #errands | Notes") },
+                    supportingText = { Text("Prefixes: task:, note:, journal:. Use #tags and | for description.") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
+                                submit()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                )
+                draft?.let {
+                    Text(
+                        text = "Creates ${it.type.name.lowercase()}: ${it.title}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { submit() }, enabled = draft != null) {
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+private fun String.toQuickEntryDraft(defaultType: EntryType): QuickEntryDraft? {
+    val trimmed = trim()
+    if (trimmed.isBlank()) return null
+    val prefix = trimmed.substringBefore(':', missingDelimiterValue = "").lowercase()
+    val explicitType = when (prefix) {
+        "task", "todo", "t" -> EntryType.TASK
+        "note", "n" -> EntryType.NOTE
+        "journal", "j" -> EntryType.JOURNAL
+        else -> null
+    }
+    val body = if (explicitType != null) trimmed.substringAfter(':').trim() else trimmed
+    val parts = body.split('|', limit = 2)
+    val rawTitle = parts.firstOrNull().orEmpty()
+    val categories = Regex("(?:^|\\s)#([^\\s#]+)")
+        .findAll(rawTitle)
+        .map { it.groupValues[1] }
+        .toList()
+    val title = rawTitle.replace(Regex("(?:^|\\s)#([^\\s#]+)"), " ").trim()
+    if (title.isBlank()) return null
+    return QuickEntryDraft(
+        type = explicitType ?: defaultType,
+        title = title,
+        description = parts.getOrNull(1)?.trim().orEmpty(),
+        categories = categories
+    )
 }
 
 private suspend fun chooseFile(title: String, mode: Int, defaultFile: String): File? = withContext(Dispatchers.IO) {
