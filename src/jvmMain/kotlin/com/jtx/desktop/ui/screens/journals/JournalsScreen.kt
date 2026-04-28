@@ -498,7 +498,7 @@ private fun Long.toDateTimeInput(): String = Instant.ofEpochMilli(this)
     .toLocalDateTime()
     .toString()
 
-private fun String.parseDateTimeInput(): Long? {
+internal fun String.parseDateTimeInput(): Long? {
     val value = trim()
     if (value.isEmpty()) return null
     value.toLongOrNull()?.let { return it }

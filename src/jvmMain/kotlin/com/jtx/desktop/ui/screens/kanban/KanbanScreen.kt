@@ -288,13 +288,13 @@ private val defaultColumns = listOf(
     KanbanColumnConfig("done", "Done", 0xFF4CAF50, 100, 100)
 )
 
-private fun progressForColumn(config: KanbanColumnConfig): Int = when {
+internal fun progressForColumn(config: KanbanColumnConfig): Int = when {
     config.progressMax <= 0 -> 0
     config.progressMin >= 100 -> 100
     else -> ((config.progressMin + config.progressMax) / 2).coerceIn(0, 100)
 }
 
-private fun List<KanbanColumnConfig>.normalizedColumns(): List<KanbanColumnConfig> {
+internal fun List<KanbanColumnConfig>.normalizedColumns(): List<KanbanColumnConfig> {
     val source = if (isEmpty()) defaultColumns else this
     return source.map { config ->
         val min = config.progressMin.coerceIn(0, 100)

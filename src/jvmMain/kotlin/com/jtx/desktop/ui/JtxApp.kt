@@ -1513,7 +1513,7 @@ private fun String?.matchesSelectedCollection(collection: String): Boolean {
     return current == target || current.endsWith(target) || target.endsWith(current)
 }
 
-private fun CombinedEntry.matchesGlobalSearch(query: String): Boolean {
+internal fun CombinedEntry.matchesGlobalSearch(query: String): Boolean {
     val terms = query.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
     return terms.all { term ->
         title.contains(term, ignoreCase = true) ||
@@ -1523,7 +1523,7 @@ private fun CombinedEntry.matchesGlobalSearch(query: String): Boolean {
     }
 }
 
-private data class QuickEntryDraft(
+internal data class QuickEntryDraft(
     val type: EntryType,
     val title: String,
     val description: String,
@@ -1587,7 +1587,7 @@ private fun QuickEntryDialog(
     )
 }
 
-private fun String.toQuickEntryDraft(defaultType: EntryType): QuickEntryDraft? {
+internal fun String.toQuickEntryDraft(defaultType: EntryType): QuickEntryDraft? {
     val trimmed = trim()
     if (trimmed.isBlank()) return null
     val prefix = trimmed.substringBefore(':', missingDelimiterValue = "").lowercase()
