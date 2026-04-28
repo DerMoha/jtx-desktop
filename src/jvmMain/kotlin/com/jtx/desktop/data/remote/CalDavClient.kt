@@ -17,7 +17,7 @@ class CalDavClient {
 
     suspend fun fetchEntries(credentials: CalDavCredentials, collection: String): Result<List<String>> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
-            val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$collection").toString())
+            val url = resolveUrl(credentials, collection)
             val conn = url.openConnection() as HttpsURLConnection
             conn.connectTimeout = connectTimeout
             conn.readTimeout = readTimeout
@@ -27,11 +27,15 @@ class CalDavClient {
             setAuth(conn, credentials)
 
             val body = """<?xml version="1.0" encoding="utf-8"?>
-                <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+                <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
                     <d:prop>
-                        <d:href/>
+                        <d:getetag/>
+                        <c:calendar-data/>
                     </d:prop>
-                </d:propfind>"""
+                    <c:filter>
+                        <c:comp-filter name="VCALENDAR"/>
+                    </c:filter>
+                </c:calendar-query>"""
 
             conn.doOutput = true
             conn.outputStream.write(body.toByteArray())
@@ -92,7 +96,7 @@ class CalDavClient {
 
     suspend fun fetchCalendarData(credentials: CalDavCredentials, href: String): Result<String> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
-            val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$href").toString())
+            val url = resolveUrl(credentials, href)
             val conn = url.openConnection() as HttpsURLConnection
             conn.connectTimeout = connectTimeout
             conn.readTimeout = readTimeout
@@ -111,7 +115,7 @@ class CalDavClient {
 
     suspend fun putEntry(credentials: CalDavCredentials, href: String, icsContent: String): Result<String> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
-            val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$href").toString())
+            val url = resolveUrl(credentials, href)
             val conn = url.openConnection() as HttpsURLConnection
             conn.connectTimeout = connectTimeout
             conn.readTimeout = readTimeout
@@ -133,7 +137,7 @@ class CalDavClient {
 
     suspend fun deleteEntry(credentials: CalDavCredentials, href: String): Result<Unit> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
-            val url = URL(URI("${credentials.serverUrl.trimEnd('/')}/$href").toString())
+            val url = resolveUrl(credentials, href)
             val conn = url.openConnection() as HttpsURLConnection
             conn.connectTimeout = connectTimeout
             conn.readTimeout = readTimeout
@@ -201,10 +205,9 @@ class CalDavClient {
     }
 
     private fun parseHrefs(xml: String): List<String> {
-        val hrefs = mutableListOf<String>()
-        val regex = Regex("<d:href>([^<]+)</d:href>")
-        regex.findAll(xml).forEach { hrefs.add(it.groupValues[1]) }
-        return hrefs
+        return responseBlocks(xml).mapNotNull { response ->
+            elementText(response, "href")
+        }.distinct()
     }
 
     private fun firstHrefInElement(xml: String, element: String): String? {
