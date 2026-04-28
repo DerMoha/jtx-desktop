@@ -4,6 +4,8 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
@@ -945,9 +947,38 @@ private fun GlobalSearchDialog(
     onOpenEntry: (CombinedEntry) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
-    val results = remember(entries, query) {
+    var typeFilter by remember { mutableStateOf<EntryType?>(null) }
+    var statusFilter by remember { mutableStateOf(TaskStatusFilter.ANY) }
+    var priorityFilter by remember { mutableStateOf<Priority?>(null) }
+    var categoryFilter by remember { mutableStateOf("") }
+    var dueFrom by remember { mutableStateOf("") }
+    var dueTo by remember { mutableStateOf("") }
+    var modifiedOnly by remember { mutableStateOf(false) }
+    var includeArchived by remember { mutableStateOf(false) }
+    val results = remember(
+        entries,
+        query,
+        typeFilter,
+        statusFilter,
+        priorityFilter,
+        categoryFilter,
+        dueFrom,
+        dueTo,
+        modifiedOnly,
+        includeArchived
+    ) {
+        val from = dueFrom.parseMillisFilter()
+        val to = dueTo.parseMillisFilter()
         entries
             .filter { entry -> query.isBlank() || entry.matchesGlobalSearch(query) }
+            .filter { entry -> typeFilter == null || entry.type == typeFilter }
+            .filter { entry -> includeArchived || !entry.archived }
+            .filter { entry -> categoryFilter.isBlank() || entry.categories.any { it.contains(categoryFilter, ignoreCase = true) } }
+            .filter { entry -> priorityFilter == null || entry.priority == priorityFilter }
+            .filter { entry -> entry.matchesStatus(statusFilter) }
+            .filter { entry -> from == null || (entry.date ?: 0) >= from }
+            .filter { entry -> to == null || (entry.date ?: Long.MAX_VALUE) <= to }
+            .filter { entry -> !modifiedOnly || (entry.modified != null && entry.modified != entry.date) }
             .sortedWith(compareBy<CombinedEntry> { it.type.name }.thenBy { it.title.lowercase() })
             .take(50)
     }
@@ -956,7 +987,12 @@ private fun GlobalSearchDialog(
         onDismissRequest = onDismiss,
         title = { Text("Global Search") },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 620.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -965,6 +1001,75 @@ private fun GlobalSearchDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = typeFilter == null, onClick = { typeFilter = null }, label = { Text("All") })
+                    EntryType.entries.forEach { type ->
+                        FilterChip(
+                            selected = typeFilter == type,
+                            onClick = { typeFilter = if (typeFilter == type) null else type },
+                            label = { Text(type.name.lowercase()) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TaskStatusFilter.entries.forEach { status ->
+                        FilterChip(
+                            selected = statusFilter == status,
+                            onClick = { statusFilter = status },
+                            label = { Text(status.label) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = priorityFilter == null, onClick = { priorityFilter = null }, label = { Text("Any priority") })
+                    listOf(Priority.URGENT, Priority.HIGH, Priority.MEDIUM, Priority.LOW).forEach { priority ->
+                        FilterChip(
+                            selected = priorityFilter == priority,
+                            onClick = { priorityFilter = if (priorityFilter == priority) null else priority },
+                            label = { Text(priority.name.lowercase()) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = categoryFilter,
+                        onValueChange = { categoryFilter = it },
+                        label = { Text("Category") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = dueFrom,
+                        onValueChange = { dueFrom = it },
+                        label = { Text("From millis") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = dueTo,
+                        onValueChange = { dueTo = it },
+                        label = { Text("To millis") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = includeArchived,
+                        onClick = { includeArchived = !includeArchived },
+                        label = { Text("Archived") }
+                    )
+                    FilterChip(
+                        selected = modifiedOnly,
+                        onClick = { modifiedOnly = !modifiedOnly },
+                        label = { Text("Modified") }
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
                     items(results, key = { "${it.type}-${it.id}" }) { entry ->
@@ -998,6 +1103,20 @@ private fun GlobalSearchDialog(
         }
     )
 }
+
+private enum class TaskStatusFilter(val label: String) {
+    ANY("Any status"),
+    PENDING("Pending"),
+    COMPLETED("Completed")
+}
+
+private fun CombinedEntry.matchesStatus(status: TaskStatusFilter): Boolean = when (status) {
+    TaskStatusFilter.ANY -> true
+    TaskStatusFilter.PENDING -> type != EntryType.TASK || completed != true
+    TaskStatusFilter.COMPLETED -> type == EntryType.TASK && completed == true
+}
+
+private fun String.parseMillisFilter(): Long? = trim().takeIf { it.isNotBlank() }?.toLongOrNull()
 
 private fun CombinedEntry.matchesGlobalSearch(query: String): Boolean {
     val terms = query.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
