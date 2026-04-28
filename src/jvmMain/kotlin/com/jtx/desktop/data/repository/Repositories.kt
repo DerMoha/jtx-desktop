@@ -230,7 +230,8 @@ private fun JournalEntry.createDirtyMetadata(entryType: EntryType): ObjectSyncMe
     deleted = false,
     uid = uid,
     sequence = sequence,
-    lastModified = updated
+    lastModified = updated,
+    lastError = null
 )
 
 private fun NoteEntry.createDirtyMetadata(entryType: EntryType): ObjectSyncMetadata = ObjectSyncMetadata(
@@ -240,7 +241,8 @@ private fun NoteEntry.createDirtyMetadata(entryType: EntryType): ObjectSyncMetad
     deleted = false,
     uid = uid,
     sequence = sequence,
-    lastModified = updated
+    lastModified = updated,
+    lastError = null
 )
 
 private fun TaskEntry.createDirtyMetadata(entryType: EntryType): ObjectSyncMetadata = ObjectSyncMetadata(
@@ -250,7 +252,8 @@ private fun TaskEntry.createDirtyMetadata(entryType: EntryType): ObjectSyncMetad
     deleted = false,
     uid = uid,
     sequence = sequence,
-    lastModified = updated
+    lastModified = updated,
+    lastError = null
 )
 
 private suspend fun LocalDataSource.markDirty(entry: JournalEntry, entryType: EntryType) {
@@ -261,7 +264,8 @@ private suspend fun LocalDataSource.markDirty(entry: JournalEntry, entryType: En
             deleted = false,
             uid = entry.uid,
             sequence = entry.sequence,
-            lastModified = entry.updated
+            lastModified = entry.updated,
+            lastError = null
         )
     )
 }
@@ -274,7 +278,8 @@ private suspend fun LocalDataSource.markDirty(entry: NoteEntry, entryType: Entry
             deleted = false,
             uid = entry.uid,
             sequence = entry.sequence,
-            lastModified = entry.updated
+            lastModified = entry.updated,
+            lastError = null
         )
     )
 }
@@ -287,7 +292,8 @@ private suspend fun LocalDataSource.markDirty(entry: TaskEntry, entryType: Entry
             deleted = false,
             uid = entry.uid,
             sequence = entry.sequence,
-            lastModified = entry.updated
+            lastModified = entry.updated,
+            lastError = null
         )
     )
 }
@@ -298,7 +304,7 @@ private suspend fun LocalDataSource.markDeleted(entryType: EntryType, entryId: S
         deleteObjectSyncMetadata(entryType, entryId)
         return
     }
-    upsertObjectSyncMetadata(existing.copy(dirty = true, deleted = true))
+    upsertObjectSyncMetadata(existing.copy(dirty = true, deleted = true, lastError = null))
 }
 
 private fun Any.sequenceValue(): Int = when (this) {
@@ -507,6 +513,7 @@ class SyncRepository(
                 EntryType.TASK -> local.getTaskById(metadata.entryId)
             }
             if (entry == null) {
+                local.upsertObjectSyncMetadata(metadata.copy(lastError = "Missing local entry"))
                 failureCount++
                 failures.add("Missing local ${metadata.entryType.name.lowercase()} ${metadata.entryId}")
                 return@forEach
@@ -523,14 +530,17 @@ class SyncRepository(
                             filename = href.substringAfterLast('/'),
                             etag = etag,
                             dirty = false,
-                            deleted = false
+                            deleted = false,
+                            lastError = null
                         )
                     )
                     successCount++
                 },
                 onFailure = { error ->
+                    val message = error.message ?: error::class.simpleName ?: "Unknown error"
+                    local.upsertObjectSyncMetadata(metadata.copy(lastError = message))
                     failureCount++
-                    failures.add("Failed to upload ${metadata.entryType.name.lowercase()} ${metadata.entryId}: ${error.message}")
+                    failures.add("Failed to upload ${metadata.entryType.name.lowercase()} ${metadata.entryId}: $message")
                 }
             )
         }
@@ -551,12 +561,14 @@ class SyncRepository(
             val result = calDavClient.deleteEntry(credentials, href)
             result.fold(
                 onSuccess = {
-                    local.upsertObjectSyncMetadata(metadata.copy(dirty = false, deleted = true))
+                    local.upsertObjectSyncMetadata(metadata.copy(dirty = false, deleted = true, lastError = null))
                     successCount++
                 },
                 onFailure = { error ->
+                    val message = error.message ?: error::class.simpleName ?: "Unknown error"
+                    local.upsertObjectSyncMetadata(metadata.copy(lastError = message))
                     failureCount++
-                    failures.add("Failed to delete ${metadata.entryType.name.lowercase()} ${metadata.entryId}: ${error.message}")
+                    failures.add("Failed to delete ${metadata.entryType.name.lowercase()} ${metadata.entryId}: $message")
                 }
             )
         }
@@ -580,6 +592,7 @@ class SyncRepository(
             }
             val href = metadata.href
             if (entry == null || href == null) {
+                local.upsertObjectSyncMetadata(metadata.copy(lastError = "Missing local entry or href"))
                 failureCount++
                 failures.add("Missing local ${metadata.entryType.name.lowercase()} ${metadata.entryId}")
                 return@forEach
@@ -594,14 +607,17 @@ class SyncRepository(
                             dirty = false,
                             deleted = false,
                             sequence = entry.sequenceValue(),
-                            lastModified = entry.updatedValue()
+                            lastModified = entry.updatedValue(),
+                            lastError = null
                         )
                     )
                     successCount++
                 },
                 onFailure = { error ->
+                    val message = error.message ?: error::class.simpleName ?: "Unknown error"
+                    local.upsertObjectSyncMetadata(metadata.copy(lastError = message))
                     failureCount++
-                    failures.add("Failed to upload ${metadata.entryType.name.lowercase()} ${metadata.entryId}: ${error.message}")
+                    failures.add("Failed to upload ${metadata.entryType.name.lowercase()} ${metadata.entryId}: $message")
                 }
             )
         }

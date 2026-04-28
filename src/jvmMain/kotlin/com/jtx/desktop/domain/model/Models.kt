@@ -207,7 +207,8 @@ data class ObjectSyncMetadata(
     val deleted: Boolean = false,
     val uid: String,
     val sequence: Int = 0,
-    val lastModified: Long? = null
+    val lastModified: Long? = null,
+    val lastError: String? = null
 )
 
 @Serializable

@@ -216,6 +216,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 uid TEXT NOT NULL,
                 sequence INTEGER NOT NULL DEFAULT 0,
                 last_modified INTEGER,
+                last_error TEXT,
                 PRIMARY KEY (entry_type, entry_id)
             )
             """
@@ -321,6 +322,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         addColumnIfMissing(stmt, "tasks", "contact", "TEXT")
         addColumnIfMissing(stmt, "tasks", "geo", "TEXT")
         addColumnIfMissing(stmt, "tasks", "classification", "TEXT")
+        addColumnIfMissing(stmt, "object_sync_metadata", "last_error", "TEXT")
     }
 
     private fun getSchemaVersion(stmt: Statement): Int =
@@ -624,7 +626,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             deleted = rs.getInt("deleted") == 1,
             uid = rs.getString("uid"),
             sequence = rs.getInt("sequence"),
-            lastModified = rs.getObject("last_modified") as? Long
+            lastModified = rs.getObject("last_modified") as? Long,
+            lastError = rs.getString("last_error")
         )
     }
 
@@ -894,8 +897,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO object_sync_metadata
-                   (entry_type, entry_id, collection_url, href, filename, etag, schedule_tag, dirty, deleted, uid, sequence, last_modified)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (entry_type, entry_id, collection_url, href, filename, etag, schedule_tag, dirty, deleted, uid, sequence, last_modified, last_error)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, metadata.entryType.name)
                 ps.setString(2, metadata.entryId)
@@ -909,6 +912,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(10, metadata.uid)
                 ps.setInt(11, metadata.sequence)
                 ps.setObject(12, metadata.lastModified)
+                ps.setString(13, metadata.lastError)
                 ps.executeUpdate()
             }
         }
