@@ -18,6 +18,8 @@ import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
 import com.jtx.desktop.ui.components.EntryCard
 import com.jtx.desktop.ui.components.SearchBar
+import java.awt.FileDialog
+import java.awt.Frame
 
 @Composable
 fun NotesScreen(
@@ -347,6 +349,15 @@ fun NoteEditDialog(
                     label = { Text("Attachment URIs") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                TextButton(onClick = {
+                    chooseAttachmentUri()?.let { uri ->
+                        attachments = listOf(attachments, uri).filter { it.isNotBlank() }.joinToString(", ")
+                    }
+                }) {
+                    Icon(Icons.Default.AttachFile, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add File")
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = relatedEntries,
@@ -397,4 +408,12 @@ private fun String.toCssColorOrNull(): String? {
         Regex("[0-9a-fA-F]{6}").matches(hex) -> "#${hex.uppercase()}"
         else -> value
     }
+}
+
+private fun chooseAttachmentUri(): String? {
+    val dialog = FileDialog(null as Frame?, "Choose Attachment", FileDialog.LOAD)
+    dialog.isVisible = true
+    val directory = dialog.directory ?: return null
+    val file = dialog.file ?: return null
+    return java.io.File(directory, file).toURI().toString()
 }
