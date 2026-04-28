@@ -137,6 +137,17 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 )
                 stmt.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS reminders (
+                        task_id TEXT NOT NULL,
+                        position INTEGER NOT NULL,
+                        minutes_before INTEGER NOT NULL,
+                        sound_enabled INTEGER NOT NULL DEFAULT 1,
+                        PRIMARY KEY (task_id, position)
+                    )
+                    """
+                )
+                stmt.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS settings (
                         key TEXT PRIMARY KEY,
                         value TEXT NOT NULL
@@ -285,8 +296,27 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             recurrenceIdTimezone = rs.getString("recurrence_id_timezone"),
             priority = Priority.valueOf(rs.getString("priority")),
             timezone = rs.getString("timezone"),
-            archived = rs.getInt("archived") == 1
+            archived = rs.getInt("archived") == 1,
+            reminders = loadTaskReminders(rs.getString("id"))
         )
+    }
+
+    private fun loadTaskReminders(taskId: String): List<Reminder> = useConnection { conn ->
+        conn.prepareStatement("SELECT * FROM reminders WHERE task_id = ? ORDER BY position").use { ps ->
+            ps.setString(1, taskId)
+            ps.executeQuery().use { rs ->
+                val list = mutableListOf<Reminder>()
+                while (rs.next()) {
+                    list.add(
+                        Reminder(
+                            minutesBefore = rs.getInt("minutes_before"),
+                            soundEnabled = rs.getInt("sound_enabled") == 1
+                        )
+                    )
+                }
+                list
+            }
+        }
     }
 
     private fun loadCollections(): List<CalDavCollection> = useConnection { conn ->
@@ -423,6 +453,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         }
     }
 
+    override suspend fun getRemindersForTask(taskId: String): List<Reminder> = withContext(Dispatchers.IO) {
+        loadTaskReminders(taskId)
+    }
+
     override suspend fun insertJournal(entry: JournalEntry) = withContext(Dispatchers.IO) {
         useConnection { conn ->
             conn.prepareStatement(
@@ -510,6 +544,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.executeUpdate()
             }
         }
+        replaceTaskReminders(entry.id, entry.reminders)
         _tasks.value = loadTasks(includeArchived = true)
     }
 
@@ -590,6 +625,29 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             }
         }
         _objectSyncMetadata.value = loadObjectSyncMetadata()
+    }
+
+    override suspend fun replaceTaskReminders(taskId: String, reminders: List<Reminder>) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("DELETE FROM reminders WHERE task_id = ?").use { ps ->
+                ps.setString(1, taskId)
+                ps.executeUpdate()
+            }
+            conn.prepareStatement(
+                """INSERT INTO reminders (task_id, position, minutes_before, sound_enabled)
+                   VALUES (?, ?, ?, ?)"""
+            ).use { ps ->
+                reminders.forEachIndexed { index, reminder ->
+                    ps.setString(1, taskId)
+                    ps.setInt(2, index)
+                    ps.setInt(3, reminder.minutesBefore)
+                    ps.setInt(4, if (reminder.soundEnabled) 1 else 0)
+                    ps.addBatch()
+                }
+                ps.executeBatch()
+            }
+        }
+        _tasks.value = loadTasks(includeArchived = true)
     }
 
     override suspend fun deleteJournal(id: String) = withContext(Dispatchers.IO) {
@@ -719,6 +777,10 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
 
     override suspend fun permanentlyDeleteTask(id: String) = withContext(Dispatchers.IO) {
         useConnection { conn ->
+            conn.prepareStatement("DELETE FROM reminders WHERE task_id = ?").use { ps ->
+                ps.setString(1, id)
+                ps.executeUpdate()
+            }
             conn.prepareStatement("DELETE FROM tasks WHERE id = ?").use { ps ->
                 ps.setString(1, id)
                 ps.executeUpdate()
