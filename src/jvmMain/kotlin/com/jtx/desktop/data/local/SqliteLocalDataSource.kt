@@ -15,6 +15,10 @@ import java.sql.Statement
 
 class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
 
+    private companion object {
+        const val CURRENT_SCHEMA_VERSION = 1
+    }
+
     private var _journals = MutableStateFlow<List<JournalEntry>>(emptyList())
     private var _notes = MutableStateFlow<List<NoteEntry>>(emptyList())
     private var _tasks = MutableStateFlow<List<TaskEntry>>(emptyList())
@@ -32,190 +36,236 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
 
     private fun initializeDatabase() {
         useConnection { conn ->
-            conn.createStatement().use { stmt ->
-                stmt.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS journals (
-                        id TEXT PRIMARY KEY,
-                        uid TEXT NOT NULL,
-                        title TEXT NOT NULL,
-                        description TEXT NOT NULL,
-                        description_format TEXT NOT NULL DEFAULT 'PLAIN',
-                        dtstart INTEGER,
-                        dtstart_timezone TEXT,
-                        dtend INTEGER,
-                        dtend_timezone TEXT,
-                        categories TEXT NOT NULL,
-                        created INTEGER NOT NULL,
-                        updated INTEGER NOT NULL,
-                        color TEXT,
-                        location TEXT,
-                        comment TEXT,
-                        related_entries TEXT NOT NULL DEFAULT '[]',
-                        archived INTEGER DEFAULT 0
-                    )
-                    """
-                )
-                stmt.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS notes (
-                        id TEXT PRIMARY KEY,
-                        uid TEXT NOT NULL,
-                        title TEXT NOT NULL,
-                        description TEXT NOT NULL,
-                        description_format TEXT NOT NULL DEFAULT 'PLAIN',
-                        categories TEXT NOT NULL,
-                        created INTEGER NOT NULL,
-                        updated INTEGER NOT NULL,
-                        color TEXT,
-                        location TEXT,
-                        related_entries TEXT NOT NULL DEFAULT '[]',
-                        archived INTEGER DEFAULT 0
-                    )
-                    """
-                )
-                stmt.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS tasks (
-                        id TEXT PRIMARY KEY,
-                        uid TEXT NOT NULL,
-                        title TEXT NOT NULL,
-                        description TEXT NOT NULL,
-                        due INTEGER,
-                        due_timezone TEXT,
-                        start INTEGER,
-                        start_timezone TEXT,
-                        completed INTEGER NOT NULL,
-                        completed_timezone TEXT,
-                        progress INTEGER NOT NULL,
-                        categories TEXT NOT NULL,
-                        created INTEGER NOT NULL,
-                        updated INTEGER NOT NULL,
-                        color TEXT,
-                        location TEXT,
-                        subtasks TEXT NOT NULL,
-                        related_entries TEXT NOT NULL,
-                        recurrence_rule TEXT,
-                        recurrence_dates TEXT NOT NULL DEFAULT '[]',
-                        exception_dates TEXT NOT NULL DEFAULT '[]',
-                        recurrence_id INTEGER,
-                        recurrence_timezone TEXT,
-                        recurrence_id_timezone TEXT,
-                        priority TEXT NOT NULL DEFAULT 'NONE',
-                        timezone TEXT,
-                        archived INTEGER DEFAULT 0
-                    )
-                    """
-                )
-                stmt.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS collections (
-                        url TEXT PRIMARY KEY,
-                        display_name TEXT NOT NULL,
-                        color TEXT,
-                        supported_components TEXT NOT NULL,
-                        read_only INTEGER NOT NULL DEFAULT 0,
-                        sync_token TEXT,
-                        ctag TEXT,
-                        last_sync INTEGER
-                    )
-                    """
-                )
-                stmt.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS object_sync_metadata (
-                        entry_type TEXT NOT NULL,
-                        entry_id TEXT NOT NULL,
-                        collection_url TEXT,
-                        href TEXT,
-                        filename TEXT,
-                        etag TEXT,
-                        schedule_tag TEXT,
-                        dirty INTEGER NOT NULL DEFAULT 0,
-                        deleted INTEGER NOT NULL DEFAULT 0,
-                        uid TEXT NOT NULL,
-                        sequence INTEGER NOT NULL DEFAULT 0,
-                        last_modified INTEGER,
-                        PRIMARY KEY (entry_type, entry_id)
-                    )
-                    """
-                )
-                stmt.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS reminders (
-                        task_id TEXT NOT NULL,
-                        position INTEGER NOT NULL,
-                        minutes_before INTEGER NOT NULL,
-                        sound_enabled INTEGER NOT NULL DEFAULT 1,
-                        PRIMARY KEY (task_id, position)
-                    )
-                    """
-                )
-                stmt.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS attachments (
-                        entry_type TEXT NOT NULL,
-                        entry_id TEXT NOT NULL,
-                        position INTEGER NOT NULL,
-                        uri TEXT NOT NULL,
-                        filename TEXT,
-                        mime_type TEXT,
-                        size INTEGER,
-                        local_path TEXT,
-                        PRIMARY KEY (entry_type, entry_id, position)
-                    )
-                    """
-                )
-                stmt.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS comments (
-                        entry_type TEXT NOT NULL,
-                        entry_id TEXT NOT NULL,
-                        position INTEGER NOT NULL,
-                        text TEXT NOT NULL,
-                        author TEXT,
-                        created INTEGER,
-                        PRIMARY KEY (entry_type, entry_id, position)
-                    )
-                    """
-                )
-                stmt.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS unknown_properties (
-                        entry_type TEXT NOT NULL,
-                        entry_id TEXT NOT NULL,
-                        position INTEGER NOT NULL,
-                        line TEXT NOT NULL,
-                        PRIMARY KEY (entry_type, entry_id, position)
-                    )
-                    """
-                )
-                stmt.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS settings (
-                        key TEXT PRIMARY KEY,
-                        value TEXT NOT NULL
-                    )
-                    """
-                )
-                addColumnIfMissing(stmt, "journals", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
-                addColumnIfMissing(stmt, "journals", "dtstart_timezone", "TEXT")
-                addColumnIfMissing(stmt, "journals", "dtend_timezone", "TEXT")
-                addColumnIfMissing(stmt, "journals", "related_entries", "TEXT NOT NULL DEFAULT '[]'")
-                addColumnIfMissing(stmt, "notes", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
-                addColumnIfMissing(stmt, "notes", "related_entries", "TEXT NOT NULL DEFAULT '[]'")
-                addColumnIfMissing(stmt, "tasks", "due_timezone", "TEXT")
-                addColumnIfMissing(stmt, "tasks", "start_timezone", "TEXT")
-                addColumnIfMissing(stmt, "tasks", "completed_timezone", "TEXT")
-                addColumnIfMissing(stmt, "tasks", "recurrence_dates", "TEXT NOT NULL DEFAULT '[]'")
-                addColumnIfMissing(stmt, "tasks", "exception_dates", "TEXT NOT NULL DEFAULT '[]'")
-                addColumnIfMissing(stmt, "tasks", "recurrence_id", "INTEGER")
-                addColumnIfMissing(stmt, "tasks", "recurrence_timezone", "TEXT")
-                addColumnIfMissing(stmt, "tasks", "recurrence_id_timezone", "TEXT")
-                addColumnIfMissing(stmt, "tasks", "priority", "TEXT NOT NULL DEFAULT 'NONE'")
-                addColumnIfMissing(stmt, "tasks", "timezone", "TEXT")
+            val previousAutoCommit = conn.autoCommit
+            conn.autoCommit = false
+            try {
+                conn.createStatement().use { stmt ->
+                    val schemaVersion = getSchemaVersion(stmt)
+                    createCurrentSchema(stmt)
+                    migrateExistingSchema(stmt)
+                    if (schemaVersion < CURRENT_SCHEMA_VERSION) {
+                        recordMigration(stmt, CURRENT_SCHEMA_VERSION, "phase_2_local_schema")
+                        setSchemaVersion(stmt, CURRENT_SCHEMA_VERSION)
+                    }
+                }
+                conn.commit()
+            } catch (e: Exception) {
+                conn.rollback()
+                throw e
+            } finally {
+                conn.autoCommit = previousAutoCommit
             }
         }
+    }
+
+    private fun createCurrentSchema(stmt: Statement) {
+        stmt.execute(
+            """
+            CREATE TABLE IF NOT EXISTS journals (
+                id TEXT PRIMARY KEY,
+                uid TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                description_format TEXT NOT NULL DEFAULT 'PLAIN',
+                dtstart INTEGER,
+                dtstart_timezone TEXT,
+                dtend INTEGER,
+                dtend_timezone TEXT,
+                categories TEXT NOT NULL,
+                created INTEGER NOT NULL,
+                updated INTEGER NOT NULL,
+                color TEXT,
+                location TEXT,
+                comment TEXT,
+                related_entries TEXT NOT NULL DEFAULT '[]',
+                archived INTEGER DEFAULT 0
+            )
+            """
+        )
+        stmt.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notes (
+                id TEXT PRIMARY KEY,
+                uid TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                description_format TEXT NOT NULL DEFAULT 'PLAIN',
+                categories TEXT NOT NULL,
+                created INTEGER NOT NULL,
+                updated INTEGER NOT NULL,
+                color TEXT,
+                location TEXT,
+                related_entries TEXT NOT NULL DEFAULT '[]',
+                archived INTEGER DEFAULT 0
+            )
+            """
+        )
+        stmt.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tasks (
+                id TEXT PRIMARY KEY,
+                uid TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                due INTEGER,
+                due_timezone TEXT,
+                start INTEGER,
+                start_timezone TEXT,
+                completed INTEGER NOT NULL,
+                completed_timezone TEXT,
+                progress INTEGER NOT NULL,
+                categories TEXT NOT NULL,
+                created INTEGER NOT NULL,
+                updated INTEGER NOT NULL,
+                color TEXT,
+                location TEXT,
+                subtasks TEXT NOT NULL,
+                related_entries TEXT NOT NULL,
+                recurrence_rule TEXT,
+                recurrence_dates TEXT NOT NULL DEFAULT '[]',
+                exception_dates TEXT NOT NULL DEFAULT '[]',
+                recurrence_id INTEGER,
+                recurrence_timezone TEXT,
+                recurrence_id_timezone TEXT,
+                priority TEXT NOT NULL DEFAULT 'NONE',
+                timezone TEXT,
+                archived INTEGER DEFAULT 0
+            )
+            """
+        )
+        stmt.execute(
+            """
+            CREATE TABLE IF NOT EXISTS collections (
+                url TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                color TEXT,
+                supported_components TEXT NOT NULL,
+                read_only INTEGER NOT NULL DEFAULT 0,
+                sync_token TEXT,
+                ctag TEXT,
+                last_sync INTEGER
+            )
+            """
+        )
+        stmt.execute(
+            """
+            CREATE TABLE IF NOT EXISTS object_sync_metadata (
+                entry_type TEXT NOT NULL,
+                entry_id TEXT NOT NULL,
+                collection_url TEXT,
+                href TEXT,
+                filename TEXT,
+                etag TEXT,
+                schedule_tag TEXT,
+                dirty INTEGER NOT NULL DEFAULT 0,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                uid TEXT NOT NULL,
+                sequence INTEGER NOT NULL DEFAULT 0,
+                last_modified INTEGER,
+                PRIMARY KEY (entry_type, entry_id)
+            )
+            """
+        )
+        stmt.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reminders (
+                task_id TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                minutes_before INTEGER NOT NULL,
+                sound_enabled INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (task_id, position)
+            )
+            """
+        )
+        stmt.execute(
+            """
+            CREATE TABLE IF NOT EXISTS attachments (
+                entry_type TEXT NOT NULL,
+                entry_id TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                uri TEXT NOT NULL,
+                filename TEXT,
+                mime_type TEXT,
+                size INTEGER,
+                local_path TEXT,
+                PRIMARY KEY (entry_type, entry_id, position)
+            )
+            """
+        )
+        stmt.execute(
+            """
+            CREATE TABLE IF NOT EXISTS comments (
+                entry_type TEXT NOT NULL,
+                entry_id TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                author TEXT,
+                created INTEGER,
+                PRIMARY KEY (entry_type, entry_id, position)
+            )
+            """
+        )
+        stmt.execute(
+            """
+            CREATE TABLE IF NOT EXISTS unknown_properties (
+                entry_type TEXT NOT NULL,
+                entry_id TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                line TEXT NOT NULL,
+                PRIMARY KEY (entry_type, entry_id, position)
+            )
+            """
+        )
+        stmt.execute(
+            """
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
+        stmt.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                applied_at INTEGER NOT NULL
+            )
+            """
+        )
+    }
+
+    private fun migrateExistingSchema(stmt: Statement) {
+        addColumnIfMissing(stmt, "journals", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
+        addColumnIfMissing(stmt, "journals", "dtstart_timezone", "TEXT")
+        addColumnIfMissing(stmt, "journals", "dtend_timezone", "TEXT")
+        addColumnIfMissing(stmt, "journals", "related_entries", "TEXT NOT NULL DEFAULT '[]'")
+        addColumnIfMissing(stmt, "notes", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
+        addColumnIfMissing(stmt, "notes", "related_entries", "TEXT NOT NULL DEFAULT '[]'")
+        addColumnIfMissing(stmt, "tasks", "due_timezone", "TEXT")
+        addColumnIfMissing(stmt, "tasks", "start_timezone", "TEXT")
+        addColumnIfMissing(stmt, "tasks", "completed_timezone", "TEXT")
+        addColumnIfMissing(stmt, "tasks", "recurrence_dates", "TEXT NOT NULL DEFAULT '[]'")
+        addColumnIfMissing(stmt, "tasks", "exception_dates", "TEXT NOT NULL DEFAULT '[]'")
+        addColumnIfMissing(stmt, "tasks", "recurrence_id", "INTEGER")
+        addColumnIfMissing(stmt, "tasks", "recurrence_timezone", "TEXT")
+        addColumnIfMissing(stmt, "tasks", "recurrence_id_timezone", "TEXT")
+        addColumnIfMissing(stmt, "tasks", "priority", "TEXT NOT NULL DEFAULT 'NONE'")
+        addColumnIfMissing(stmt, "tasks", "timezone", "TEXT")
+    }
+
+    private fun getSchemaVersion(stmt: Statement): Int =
+        stmt.executeQuery("PRAGMA user_version").use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+
+    private fun setSchemaVersion(stmt: Statement, version: Int) {
+        stmt.execute("PRAGMA user_version = $version")
+    }
+
+    private fun recordMigration(stmt: Statement, version: Int, name: String) {
+        stmt.executeUpdate(
+            "INSERT OR IGNORE INTO schema_migrations (version, name, applied_at) " +
+                "VALUES ($version, '$name', ${System.currentTimeMillis()})"
+        )
     }
 
     private fun addColumnIfMissing(stmt: Statement, table: String, column: String, definition: String) {
