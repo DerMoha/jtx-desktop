@@ -174,6 +174,7 @@ class ICalendarParser {
             var location: String? = null
             var comment: String? = null
             var relatedEntries = emptyList<String>()
+            var attachments = emptyList<EntryAttachment>()
 
             for (line in lines) {
                 when {
@@ -191,6 +192,7 @@ class ICalendarParser {
                     line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
                     line.startsWith("COMMENT:") -> comment = line.substringAfter("COMMENT:").trim()
                     line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
+                    line.startsWith("ATTACH") -> attachments = attachments + parseAttachment(line)
                     line.startsWith("COLOR:") -> color = line.substringAfter("COLOR:").trim()
                 }
             }
@@ -203,7 +205,7 @@ class ICalendarParser {
                 created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, comment = comment,
-                relatedEntries = relatedEntries
+                relatedEntries = relatedEntries, attachments = attachments
             )
         } catch (e: Exception) { null }
     }
@@ -225,6 +227,7 @@ class ICalendarParser {
             var location: String? = null
             var priority = Priority.NONE
             var relatedEntries = emptyList<String>()
+            var attachments = emptyList<EntryAttachment>()
             var recurrenceRule: RecurrenceRule? = null
             var recurrenceDates = emptyList<Long>()
             var exceptionDates = emptyList<Long>()
@@ -264,6 +267,7 @@ class ICalendarParser {
                     line.startsWith("LOCATION:") -> location = line.substringAfter("LOCATION:").trim()
                     line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
                     line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
+                    line.startsWith("ATTACH") -> attachments = attachments + parseAttachment(line)
                 }
             }
 
@@ -277,7 +281,8 @@ class ICalendarParser {
                 color = color, location = location, subtasks = emptyList(), relatedEntries = relatedEntries,
                 priority = priority, recurrenceRule = recurrenceRule, recurrenceDates = recurrenceDates,
                 exceptionDates = exceptionDates, recurrenceId = recurrenceId,
-                recurrenceTimezone = recurrenceTimezone, recurrenceIdTimezone = recurrenceIdTimezone
+                recurrenceTimezone = recurrenceTimezone, recurrenceIdTimezone = recurrenceIdTimezone,
+                attachments = attachments
             )
         } catch (e: Exception) { null }
     }
@@ -294,6 +299,7 @@ class ICalendarParser {
             var color: String? = null
             var location: String? = null
             var relatedEntries = emptyList<String>()
+            var attachments = emptyList<EntryAttachment>()
 
             for (line in lines) {
                 when {
@@ -309,6 +315,7 @@ class ICalendarParser {
                     line.startsWith("COLOR:") -> color = line.substringAfter("COLOR:").trim()
                     line.startsWith("X-APPLE-STRUCTURED-LOCATION") -> location = line.substringAfter("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:").trim()
                     line.startsWith("RELATED-TO") -> relatedEntries = relatedEntries + line.substringAfter(":").trim()
+                    line.startsWith("ATTACH") -> attachments = attachments + parseAttachment(line)
                 }
             }
 
@@ -318,7 +325,8 @@ class ICalendarParser {
                 id = uid, uid = uid, title = summary, description = description,
                 categories = categories, created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
-                color = color, location = location, relatedEntries = relatedEntries
+                color = color, location = location, relatedEntries = relatedEntries,
+                attachments = attachments
             )
         } catch (e: Exception) { null }
     }
@@ -340,6 +348,7 @@ class ICalendarParser {
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
             if (entry.comment != null) appendLine("COMMENT:${entry.comment}")
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
+            entry.attachments.forEach { appendLine(it.toIcsAttach()) }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VJOURNAL")
@@ -370,6 +379,7 @@ class ICalendarParser {
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
+            entry.attachments.forEach { appendLine(it.toIcsAttach()) }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VTODO")
@@ -391,6 +401,7 @@ class ICalendarParser {
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
+            entry.attachments.forEach { appendLine(it.toIcsAttach()) }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
             appendLine("END:VNOTE")
@@ -463,8 +474,36 @@ class ICalendarParser {
             }
     }
 
+    private fun parseAttachment(line: String): EntryAttachment {
+        val params = line.substringBefore(":")
+            .split(";")
+            .drop(1)
+            .mapNotNull { param ->
+                val key = param.substringBefore("=", missingDelimiterValue = "").uppercase()
+                val value = param.substringAfter("=", missingDelimiterValue = "")
+                if (key.isBlank() || value.isBlank()) null else key to value
+            }
+            .toMap()
+        return EntryAttachment(
+            uri = line.substringAfter(":").trim(),
+            filename = params["FILENAME"],
+            mimeType = params["FMTTYPE"],
+            size = params["SIZE"]?.toLongOrNull()
+        )
+    }
+
     private fun String?.toIcsTimezoneParam(): String {
         return if (this.isNullOrBlank()) "" else ";TZID=$this"
+    }
+
+    private fun EntryAttachment.toIcsAttach(): String {
+        return buildString {
+            append("ATTACH")
+            if (!mimeType.isNullOrBlank()) append(";FMTTYPE=$mimeType")
+            if (!filename.isNullOrBlank()) append(";FILENAME=$filename")
+            if (size != null) append(";SIZE=$size")
+            append(":$uri")
+        }
     }
 
     private fun RecurrenceRule.toIcsRRule(): String {

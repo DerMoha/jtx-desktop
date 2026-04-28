@@ -43,6 +43,9 @@ interface LocalDataSource {
     suspend fun getRemindersForTask(taskId: String): List<Reminder>
     suspend fun replaceTaskReminders(taskId: String, reminders: List<Reminder>)
 
+    suspend fun getAttachmentsForEntry(entryType: EntryType, entryId: String): List<EntryAttachment>
+    suspend fun replaceEntryAttachments(entryType: EntryType, entryId: String, attachments: List<EntryAttachment>)
+
     suspend fun getSettings(): AppSettings
     suspend fun saveSettings(settings: AppSettings)
 }

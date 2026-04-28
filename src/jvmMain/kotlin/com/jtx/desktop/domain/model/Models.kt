@@ -20,6 +20,7 @@ data class JournalEntry(
     val location: String?,
     val comment: String?,
     val relatedEntries: List<String> = emptyList(),
+    val attachments: List<EntryAttachment> = emptyList(),
     val archived: Boolean = false
 )
 
@@ -36,6 +37,7 @@ data class NoteEntry(
     val color: String?,
     val location: String? = null,
     val relatedEntries: List<String> = emptyList(),
+    val attachments: List<EntryAttachment> = emptyList(),
     val archived: Boolean = false
 )
 
@@ -68,7 +70,17 @@ data class TaskEntry(
     val dueTimezone: String? = null,
     val completedTimezone: String? = null,
     val recurrenceTimezone: String? = null,
-    val recurrenceIdTimezone: String? = null
+    val recurrenceIdTimezone: String? = null,
+    val attachments: List<EntryAttachment> = emptyList()
+)
+
+@Serializable
+data class EntryAttachment(
+    val uri: String,
+    val filename: String? = null,
+    val mimeType: String? = null,
+    val size: Long? = null,
+    val localPath: String? = null
 )
 
 @Serializable
