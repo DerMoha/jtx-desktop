@@ -19,6 +19,7 @@ import com.jtx.desktop.data.repository.TemplateRepository
 import com.jtx.desktop.data.local.SqliteLocalDataSource
 import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -38,7 +39,9 @@ fun SettingsScreen(
     var isLoading by remember { mutableStateOf(true) }
     var isSaving by remember { mutableStateOf(false) }
     var isSyncing by remember { mutableStateOf(false) }
+    var isDiscovering by remember { mutableStateOf(false) }
     var syncMessage by remember { mutableStateOf<String?>(null) }
+    var discoveredCollections by remember { mutableStateOf<List<CalDavCollection>>(emptyList()) }
 
     var serverUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
@@ -59,6 +62,7 @@ fun SettingsScreen(
         }
         collection = settings.collection ?: ""
         kanbanColumns = settings.kanbanColumns
+        discoveredCollections = syncRepository.localDataSource.getAllCollections().first()
         isLoading = false
     }
 
@@ -201,6 +205,49 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+
+                OutlinedButton(
+                    onClick = {
+                        isDiscovering = true
+                        syncMessage = null
+                        scope.launch {
+                            val credentials = CalDavCredentials(serverUrl, username, password)
+                            val result = syncRepository.discoverCollections(credentials)
+                            result.fold(
+                                onSuccess = { collections ->
+                                    discoveredCollections = collections
+                                    if (collection.isBlank()) {
+                                        collection = collections.firstOrNull()?.url.orEmpty()
+                                    }
+                                    syncMessage = "Discovered ${collections.size} CalDAV collection${if (collections.size == 1) "" else "s"}"
+                                },
+                                onFailure = { error ->
+                                    syncMessage = "Discovery failed: ${error.message}"
+                                }
+                            )
+                            isDiscovering = false
+                        }
+                    },
+                    enabled = !isSaving && !isSyncing && !isDiscovering && serverUrl.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (isDiscovering) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Discover Collections")
+                    }
+                }
+
+                discoveredCollections.forEach { discovered ->
+                    CollectionCapabilityCard(
+                        collection = discovered,
+                        selected = collection == discovered.url,
+                        onSelect = { collection = discovered.url }
+                    )
+                }
             }
         }
 
@@ -295,7 +342,7 @@ fun SettingsScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (msg.startsWith("Sync failed") || msg.startsWith("Please"))
+                    containerColor = if (msg.startsWith("Sync failed") || msg.startsWith("Discovery failed") || msg.startsWith("Please"))
                         MaterialTheme.colorScheme.errorContainer
                     else MaterialTheme.colorScheme.secondaryContainer
                 )
@@ -303,7 +350,7 @@ fun SettingsScreen(
                 Text(
                     text = msg,
                     modifier = Modifier.padding(16.dp),
-                    color = if (msg.startsWith("Sync failed") || msg.startsWith("Please"))
+                    color = if (msg.startsWith("Sync failed") || msg.startsWith("Discovery failed") || msg.startsWith("Please"))
                         MaterialTheme.colorScheme.onErrorContainer
                     else MaterialTheme.colorScheme.onSecondaryContainer
                 )
@@ -535,5 +582,62 @@ fun SettingsScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun CollectionCapabilityCard(
+    collection: CalDavCollection,
+    selected: Boolean,
+    onSelect: () -> Unit
+) {
+    val components = collection.supportedComponents.joinToString { component ->
+        when (component) {
+            EntryType.JOURNAL -> "journals"
+            EntryType.NOTE -> "notes"
+            EntryType.TASK -> "tasks"
+        }
+    }.ifBlank { "unknown components" }
+
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(collection.displayName, style = MaterialTheme.typography.titleSmall)
+                    Text(collection.url, style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(onClick = onSelect, enabled = !selected) {
+                    Text(if (selected) "Selected" else "Select")
+                }
+            }
+            Text(
+                text = "Supports $components${if (collection.readOnly) " (read-only)" else ""}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            collection.color?.takeIf { it.isNotBlank() }?.let { color ->
+                Text(
+                    text = "Color: $color",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }

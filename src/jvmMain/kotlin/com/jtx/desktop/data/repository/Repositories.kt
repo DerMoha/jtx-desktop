@@ -225,8 +225,17 @@ class SyncRepository(
         val serverUpdated: Long
     )
 
+    suspend fun discoverCollections(credentials: CalDavCredentials): Result<List<CalDavCollection>> {
+        return calDavClient.discoverCollections(credentials).onSuccess { collections ->
+            collections.forEach { collection ->
+                local.upsertCollection(collection)
+            }
+        }
+    }
+
     suspend fun sync(credentials: CalDavCredentials, collection: String): Result<SyncResult> {
         val settings = local.getSettings()
+        discoverCollections(credentials)
         val fetchResult = calDavClient.fetchEntries(credentials, collection)
         return fetchResult.fold(
             onSuccess = { hrefs ->
