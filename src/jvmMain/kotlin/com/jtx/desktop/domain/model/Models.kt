@@ -15,7 +15,8 @@ data class JournalEntry(
     val updated: Long,
     val color: String?,
     val location: String?,
-    val comment: String?
+    val comment: String?,
+    val archived: Boolean = false
 )
 
 @Serializable
@@ -28,7 +29,8 @@ data class NoteEntry(
     val created: Long,
     val updated: Long,
     val color: String?,
-    val location: String? = null
+    val location: String? = null,
+    val archived: Boolean = false
 )
 
 @Serializable
@@ -47,7 +49,9 @@ data class TaskEntry(
     val color: String?,
     val location: String?,
     val subtasks: List<Subtask>,
-    val relatedEntries: List<String>
+    val relatedEntries: List<String>,
+    val recurrenceRule: RecurrenceRule? = null,
+    val archived: Boolean = false
 )
 
 @Serializable
@@ -56,6 +60,19 @@ data class Subtask(
     val title: String,
     val completed: Boolean
 )
+
+@Serializable
+data class RecurrenceRule(
+    val frequency: RecurrenceFrequency,
+    val interval: Int = 1,
+    val endDate: Long? = null,
+    val count: Int? = null
+)
+
+@Serializable
+enum class RecurrenceFrequency {
+    DAILY, WEEKLY, MONTHLY, YEARLY
+}
 
 enum class EntryType {
     JOURNAL, NOTE, TASK
@@ -70,7 +87,8 @@ data class CombinedEntry(
     val categories: List<String>,
     val color: String?,
     val progress: Int?,
-    val completed: Boolean?
+    val completed: Boolean?,
+    val archived: Boolean = false
 )
 
 @Serializable
@@ -84,5 +102,55 @@ data class CalDavCredentials(
 data class AppSettings(
     val credentials: CalDavCredentials? = null,
     val collection: String? = null,
-    val lastSyncTime: Long? = null
+    val lastSyncTime: Long? = null,
+    val sortPreference: SortPreference = SortPreference(SortField.DATE, false),
+    val darkModePreference: DarkModePreference = DarkModePreference.SYSTEM,
+    val kanbanColumns: List<KanbanColumnConfig> = defaultKanbanColumns
 )
+
+@Serializable
+data class SortPreference(
+    val field: SortField = SortField.DATE,
+    val ascending: Boolean = false
+)
+
+@Serializable
+enum class SortField {
+    DATE, TITLE, MODIFIED
+}
+
+@Serializable
+enum class DarkModePreference {
+    LIGHT, DARK, SYSTEM
+}
+
+@Serializable
+data class KanbanColumnConfig(
+    val id: String,
+    val title: String,
+    val color: Long,
+    val progressMin: Int,
+    val progressMax: Int
+)
+
+val defaultKanbanColumns = listOf(
+    KanbanColumnConfig("todo", "To Do", 0xFF2196F3, 0, 0),
+    KanbanColumnConfig("inprogress", "In Progress", 0xFFFFC107, 1, 99),
+    KanbanColumnConfig("done", "Done", 0xFF4CAF50, 100, 100)
+)
+
+@Serializable
+data class EntryTemplate(
+    val id: String,
+    val type: EntryType,
+    val title: String,
+    val description: String? = null,
+    val categories: List<String> = emptyList(),
+    val color: String? = null,
+    val dueDays: Int? = null,
+    val recurrence: RecurrenceRule? = null
+)
+
+enum class SyncState {
+    IDLE, SYNCING, SUCCESS, ERROR
+}

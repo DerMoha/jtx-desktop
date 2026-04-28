@@ -1,13 +1,13 @@
 package com.jtx.desktop.data.repository
 
-import com.jtx.desktop.data.local.InMemoryLocalDataSource
+import com.jtx.desktop.data.local.LocalDataSource
 import com.jtx.desktop.data.remote.CalDavClient
 import com.jtx.desktop.data.remote.ICalendarParser
 import com.jtx.desktop.domain.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-class JournalRepository(private val local: InMemoryLocalDataSource) {
+class JournalRepository(private val local: LocalDataSource) {
     fun getAll(): Flow<List<JournalEntry>> = local.getAllJournals()
     fun getAllCombined(): Flow<List<CombinedEntry>> = local.getAllJournals().map { journals ->
         journals.map { journal ->
@@ -20,7 +20,8 @@ class JournalRepository(private val local: InMemoryLocalDataSource) {
                 categories = journal.categories,
                 color = journal.color,
                 progress = null,
-                completed = null
+                completed = null,
+                archived = journal.archived
             )
         }
     }
@@ -29,12 +30,16 @@ class JournalRepository(private val local: InMemoryLocalDataSource) {
     suspend fun update(entry: JournalEntry) = local.updateJournal(entry)
     suspend fun updateJournal(combined: CombinedEntry) {
         val existing = local.getJournalById(combined.id) ?: return
-        local.updateJournal(existing.copy(title = combined.title, description = combined.description))
+        local.updateJournal(existing.copy(
+            title = combined.title,
+            description = combined.description,
+            archived = combined.archived
+        ))
     }
     suspend fun delete(id: String) = local.deleteJournal(id)
 }
 
-class NoteRepository(private val local: InMemoryLocalDataSource) {
+class NoteRepository(private val local: LocalDataSource) {
     fun getAll(): Flow<List<NoteEntry>> = local.getAllNotes()
     fun getAllCombined(): Flow<List<CombinedEntry>> = local.getAllNotes().map { notes ->
         notes.map { note ->
@@ -47,7 +52,8 @@ class NoteRepository(private val local: InMemoryLocalDataSource) {
                 categories = note.categories,
                 color = note.color,
                 progress = null,
-                completed = null
+                completed = null,
+                archived = note.archived
             )
         }
     }
@@ -56,12 +62,16 @@ class NoteRepository(private val local: InMemoryLocalDataSource) {
     suspend fun update(entry: NoteEntry) = local.updateNote(entry)
     suspend fun updateNote(combined: CombinedEntry) {
         val existing = local.getNoteById(combined.id) ?: return
-        local.updateNote(existing.copy(title = combined.title, description = combined.description))
+        local.updateNote(existing.copy(
+            title = combined.title,
+            description = combined.description,
+            archived = combined.archived
+        ))
     }
     suspend fun delete(id: String) = local.deleteNote(id)
 }
 
-class TaskRepository(private val local: InMemoryLocalDataSource) {
+class TaskRepository(private val local: LocalDataSource) {
     fun getAll(): Flow<List<TaskEntry>> = local.getAllTasks()
     fun getAllCombined(): Flow<List<CombinedEntry>> = local.getAllTasks().map { tasks ->
         tasks.map { task ->
@@ -74,7 +84,8 @@ class TaskRepository(private val local: InMemoryLocalDataSource) {
                 categories = task.categories,
                 color = task.color,
                 progress = task.progress,
-                completed = task.completed
+                completed = task.completed,
+                archived = task.archived
             )
         }
     }
@@ -87,22 +98,30 @@ class TaskRepository(private val local: InMemoryLocalDataSource) {
             title = combined.title,
             description = combined.description,
             progress = combined.progress ?: 0,
-            completed = combined.completed ?: false
+            completed = combined.completed ?: false,
+            archived = combined.archived
         ))
     }
     suspend fun updateTaskCompleted(id: String, completed: Boolean) {
         val existing = local.getTaskById(id) ?: return
         local.updateTask(existing.copy(completed = completed))
     }
+    suspend fun updateTaskProgress(id: String, progress: Int) {
+        val existing = local.getTaskById(id) ?: return
+        local.updateTask(existing.copy(
+            progress = progress,
+            completed = progress >= 100
+        ))
+    }
     suspend fun delete(id: String) = local.deleteTask(id)
 }
 
 class SyncRepository(
-    private val local: InMemoryLocalDataSource,
+    private val local: LocalDataSource,
     private val calDavClient: CalDavClient,
     private val parser: ICalendarParser
 ) {
-    val localDataSource: InMemoryLocalDataSource get() = local
+    val localDataSource: LocalDataSource get() = local
 
     data class SyncResult(
         val successCount: Int,
@@ -130,15 +149,24 @@ class SyncRepository(
                             }
                             when (entry) {
                                 is JournalEntry -> {
-                                    local.insertJournal(entry)
+                                    val existing = local.getJournalById(entry.id)
+                                    if (existing == null || existing.updated < entry.updated) {
+                                        local.insertJournal(entry)
+                                    }
                                     successCount++
                                 }
                                 is NoteEntry -> {
-                                    local.insertNote(entry)
+                                    val existing = local.getNoteById(entry.id)
+                                    if (existing == null || existing.updated < entry.updated) {
+                                        local.insertNote(entry)
+                                    }
                                     successCount++
                                 }
                                 is TaskEntry -> {
-                                    local.insertTask(entry)
+                                    val existing = local.getTaskById(entry.id)
+                                    if (existing == null || existing.updated < entry.updated) {
+                                        local.insertTask(entry)
+                                    }
                                     successCount++
                                 }
                                 else -> {}
@@ -186,4 +214,17 @@ class SyncRepository(
 
     suspend fun getSettings(): AppSettings = local.getSettings()
     suspend fun saveSettings(settings: AppSettings) = local.saveSettings(settings)
+}
+
+class TemplateRepository(private val local: LocalDataSource) {
+    private val builtInTemplates = listOf(
+        EntryTemplate("daily_standup", EntryType.TASK, "Daily Standup", "What I did yesterday:\n\nWhat I plan to do today:\n\nBlockers:", categories = listOf("standup")),
+        EntryTemplate("meeting_notes", EntryType.NOTE, "Meeting Notes", "Date:\nLocation:\nAttendees:\n\nAgenda:\n\nNotes:\n\nAction Items:", categories = listOf("meeting")),
+        EntryTemplate("weekly_review", EntryType.TASK, "Weekly Review", categories = listOf("review"), recurrence = RecurrenceRule(RecurrenceFrequency.WEEKLY, 1))
+    )
+
+    fun getTemplates(): List<EntryTemplate> = builtInTemplates
+
+    fun getTemplatesByType(type: EntryType): List<EntryTemplate> =
+        builtInTemplates.filter { it.type == type }
 }

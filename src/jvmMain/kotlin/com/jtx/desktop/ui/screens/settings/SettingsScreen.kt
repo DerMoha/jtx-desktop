@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,15 +15,23 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.jtx.desktop.data.repository.SyncRepository
-import com.jtx.desktop.domain.model.AppSettings
-import com.jtx.desktop.domain.model.CalDavCredentials
+import com.jtx.desktop.data.repository.TemplateRepository
+import com.jtx.desktop.data.local.SqliteLocalDataSource
+import com.jtx.desktop.domain.model.*
+import com.jtx.desktop.ui.SortOrder
 import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     syncRepository: SyncRepository,
-    onSync: () -> Unit
+    templateRepository: TemplateRepository? = null,
+    onSync: () -> Unit,
+    darkModePreference: DarkModePreference = DarkModePreference.SYSTEM,
+    onDarkModeChange: (DarkModePreference) -> Unit = {},
+    sortOrder: SortOrder = SortOrder.DATE_DESC,
+    onSortChange: (SortOrder) -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     var settings by remember { mutableStateOf(AppSettings()) }
@@ -35,6 +45,10 @@ fun SettingsScreen(
     var password by remember { mutableStateOf("") }
     var collection by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
+    var showKanbanConfig by remember { mutableStateOf(false) }
+    var kanbanColumns by remember { mutableStateOf(settings.kanbanColumns) }
 
     LaunchedEffect(Unit) {
         settings = syncRepository.getSettings()
@@ -44,6 +58,7 @@ fun SettingsScreen(
             password = it.password
         }
         collection = settings.collection ?: ""
+        kanbanColumns = settings.kanbanColumns
         isLoading = false
     }
 
@@ -54,6 +69,83 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Text(
+            text = "Appearance",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Theme", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DarkModePreference.entries.forEach { pref ->
+                        FilterChip(
+                            selected = darkModePreference == pref,
+                            onClick = { onDarkModeChange(pref) },
+                            label = {
+                                Text(
+                                    when (pref) {
+                                        DarkModePreference.LIGHT -> "Light"
+                                        DarkModePreference.DARK -> "Dark"
+                                        DarkModePreference.SYSTEM -> "System"
+                                    }
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    when (pref) {
+                                        DarkModePreference.LIGHT -> Icons.Default.LightMode
+                                        DarkModePreference.DARK -> Icons.Default.DarkMode
+                                        DarkModePreference.SYSTEM -> Icons.Default.Settings
+                                    },
+                                    null
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        Text(
+            text = "Default Sort",
+            style = MaterialTheme.typography.labelLarge
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SortOrder.entries.take(3).forEach { order ->
+                FilterChip(
+                    selected = sortOrder == order,
+                    onClick = { onSortChange(order) },
+                    label = {
+                        Text(
+                            when (order) {
+                                SortOrder.DATE_DESC -> "Date ↓"
+                                SortOrder.DATE_ASC -> "Date ↑"
+                                SortOrder.TITLE_ASC -> "A-Z"
+                                SortOrder.TITLE_DESC -> "Z-A"
+                                SortOrder.MODIFIED_DESC -> "Modified ↓"
+                                SortOrder.MODIFIED_ASC -> "Modified ↑"
+                            }
+                        )
+                    }
+                )
+            }
+        }
+
+        HorizontalDivider()
+
         Text(
             text = "CalDAV Settings",
             style = MaterialTheme.typography.headlineSmall,
@@ -126,7 +218,17 @@ fun SettingsScreen(
                         syncRepository.saveSettings(
                             settings.copy(
                                 credentials = credentials,
-                                collection = collection.ifBlank { null }
+                                collection = collection.ifBlank { null },
+                                darkModePreference = darkModePreference,
+                                sortPreference = when (sortOrder) {
+                                    SortOrder.DATE_DESC -> SortPreference(SortField.DATE, false)
+                                    SortOrder.DATE_ASC -> SortPreference(SortField.DATE, true)
+                                    SortOrder.TITLE_ASC -> SortPreference(SortField.TITLE, true)
+                                    SortOrder.TITLE_DESC -> SortPreference(SortField.TITLE, false)
+                                    SortOrder.MODIFIED_DESC -> SortPreference(SortField.MODIFIED, false)
+                                    SortOrder.MODIFIED_ASC -> SortPreference(SortField.MODIFIED, true)
+                                },
+                                kanbanColumns = kanbanColumns
                             )
                         )
                         isSaving = false
@@ -215,5 +317,223 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+
+        HorizontalDivider()
+
+        Text(
+            text = "Data Management",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = { showExportDialog = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Upload, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Export Data")
+            }
+
+            OutlinedButton(
+                onClick = { showImportDialog = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Download, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Import Data")
+            }
+        }
+
+        HorizontalDivider()
+
+        Text(
+            text = "Kanban Board",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        TextButton(onClick = { showKanbanConfig = true }) {
+            Icon(Icons.Default.ViewColumn, null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Configure Columns")
+        }
+
+        if (showKanbanConfig) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    kanbanColumns.forEachIndexed { index, column ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = column.title,
+                                onValueChange = { newTitle ->
+                                    kanbanColumns = kanbanColumns.toMutableList().apply {
+                                        set(index, column.copy(title = newTitle))
+                                    }
+                                },
+                                label = { Text("Column ${index + 1} Title") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = {
+                                kanbanColumns = kanbanColumns.toMutableList().apply {
+                                    removeAt(index)
+                                }
+                            }) {
+                                Icon(Icons.Default.Delete, null)
+                            }
+                        }
+                    }
+                    Row {
+                        TextButton(onClick = {
+                            kanbanColumns = kanbanColumns + KanbanColumnConfig(
+                                id = "col_${System.currentTimeMillis()}",
+                                title = "New Column",
+                                color = 0xFF9E9E9E,
+                                progressMin = 0,
+                                progressMax = 0
+                            )
+                        }) {
+                            Icon(Icons.Default.Add, null)
+                            Text("Add Column")
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        TextButton(onClick = {
+                            kanbanColumns = defaultKanbanColumns
+                        }) {
+                            Text("Reset to Default")
+                        }
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider()
+
+        Text(
+            text = "Templates",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Built-in Templates", style = MaterialTheme.typography.labelLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+                templateRepository?.getTemplates()?.forEach { template ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            when (template.type) {
+                                EntryType.TASK -> Icons.Default.CheckCircle
+                                EntryType.NOTE -> Icons.Default.StickyNote2
+                                EntryType.JOURNAL -> Icons.Default.Book
+                            },
+                            null
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(template.title, modifier = Modifier.weight(1f))
+                    }
+                } ?: Text("No templates available", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+
+    if (showExportDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportDialog = false },
+            title = { Text("Export Data") },
+            text = {
+                Column {
+                    Text("Export all your data to a JSON file.")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("This will include all journals, notes, and tasks.", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        val dataSource = syncRepository.localDataSource
+                        if (dataSource is SqliteLocalDataSource) {
+                            val json = dataSource.exportAllData()
+                            File("jtx_board_export.json").writeText(json)
+                            syncMessage = "Data exported to jtx_board_export.json"
+                        } else {
+                            syncMessage = "Export not supported with current data source"
+                        }
+                        showExportDialog = false
+                    }
+                }) {
+                    Text("Export")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExportDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showImportDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportDialog = false },
+            title = { Text("Import Data") },
+            text = {
+                Column {
+                    Text("Import data from a JSON file.")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Warning: This will merge with existing data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        val dataSource = syncRepository.localDataSource
+                        if (dataSource is SqliteLocalDataSource) {
+                            try {
+                                val file = File("jtx_board_export.json")
+                                if (file.exists()) {
+                                    dataSource.importData(file.readText())
+                                    syncMessage = "Data imported successfully"
+                                } else {
+                                    syncMessage = "File not found: jtx_board_export.json"
+                                }
+                            } catch (e: Exception) {
+                                syncMessage = "Import failed: ${e.message}"
+                            }
+                        } else {
+                            syncMessage = "Import not supported with current data source"
+                        }
+                        showImportDialog = false
+                    }
+                }) {
+                    Text("Import")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

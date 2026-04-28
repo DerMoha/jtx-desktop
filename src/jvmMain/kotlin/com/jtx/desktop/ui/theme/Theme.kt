@@ -26,7 +26,9 @@ private val LightColorScheme = lightColorScheme(
     onSurfaceVariant = JtxOnSurfaceVariant,
     outline = JtxOutline,
     error = JtxError,
-    onError = Color.White
+    onError = Color.White,
+    errorContainer = Color(0xFFF9DEDC),
+    onErrorContainer = Color(0xFF410E0B)
 )
 
 private val DarkColorScheme = darkColorScheme(
@@ -41,7 +43,16 @@ private val DarkColorScheme = darkColorScheme(
     background = Color(0xFF1C1B1F),
     onBackground = Color.White,
     surface = Color(0xFF2B2930),
-    onSurface = Color.White
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF49454F),
+    onSurfaceVariant = Color(0xFFCAC4D0),
+    outline = Color(0xFF938F99),
+    error = Color(0xFFF2B8B5),
+    onError = Color(0xFF601410),
+    errorContainer = Color(0xFF8C1D18),
+    onErrorContainer = Color(0xFFF9DEDC),
+    secondaryContainer = Color(0xFF4A4458),
+    onSecondaryContainer = Color(0xFFE8DEF8)
 )
 
 @Composable

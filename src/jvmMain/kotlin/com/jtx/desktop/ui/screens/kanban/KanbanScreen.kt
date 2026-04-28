@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,36 +21,46 @@ import androidx.compose.ui.unit.dp
 import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.domain.model.CombinedEntry
 import com.jtx.desktop.domain.model.EntryType
+import com.jtx.desktop.domain.model.KanbanColumnConfig
 
 data class KanbanColumn(
-    val title: String,
-    val color: Color,
+    val config: KanbanColumnConfig,
     val entries: List<CombinedEntry>
 )
 
 @Composable
-fun KanbanScreen(repository: TaskRepository) {
+fun KanbanScreen(
+    repository: TaskRepository,
+    kanbanColumns: List<KanbanColumnConfig> = emptyList(),
+    onTaskMove: (String, Int) -> Unit = { _, _ -> }
+) {
     var columns by remember {
         mutableStateOf(
-            listOf(
-                KanbanColumn("To Do", Color(0xFF2196F3), emptyList()),
-                KanbanColumn("In Progress", Color(0xFFFFC107), emptyList()),
-                KanbanColumn("Done", Color(0xFF4CAF50), emptyList())
-            )
+            kanbanColumns.ifEmpty { defaultColumns }.map { config ->
+                KanbanColumn(config, emptyList())
+            }
         )
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit, kanbanColumns) {
         repository.getAllCombined().collect { tasks ->
-            columns = listOf(
-                KanbanColumn("To Do", Color(0xFF2196F3), tasks.filter { it.completed != true }),
-                KanbanColumn("In Progress", Color(0xFFFFC107), emptyList()),
-                KanbanColumn("Done", Color(0xFF4CAF50), tasks.filter { it.completed == true })
-            )
+            val updatedColumns = if (kanbanColumns.isEmpty()) {
+                defaultColumns
+            } else {
+                kanbanColumns
+            }.map { config ->
+                val columnTasks = tasks.filter { task ->
+                    val progress = task.progress ?: 0
+                    progress >= config.progressMin && progress <= config.progressMax
+                }
+                KanbanColumn(config, columnTasks)
+            }
+            columns = updatedColumns
         }
     }
 
     var draggedEntry by remember { mutableStateOf<CombinedEntry?>(null) }
+    var dragTargetColumn by remember { mutableStateOf<String?>(null) }
 
     LazyRow(
         modifier = Modifier.fillMaxSize(),
@@ -56,19 +68,25 @@ fun KanbanScreen(repository: TaskRepository) {
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         items(columns.size) { columnIndex ->
+            val column = columns[columnIndex]
             KanbanColumnCard(
-                column = columns[columnIndex],
+                column = column,
                 onEntryClick = { entry -> },
+                onDragOver = { dragTargetColumn = column.config.id },
+                onDragLeave = { if (dragTargetColumn == column.config.id) dragTargetColumn = null },
                 onDrop = { entry ->
-                    columns = columns.mapIndexed { index, col ->
-                        if (index == columnIndex) {
-                            col.copy(entries = col.entries + entry)
-                        } else {
-                            col.copy(entries = col.entries.filter { it.id != entry.id })
-                        }
+                    val targetColumn = columns.find { it.config.id == dragTargetColumn } ?: column
+                    val newProgress = when {
+                        targetColumn.config.progressMax == 0 -> 0
+                        targetColumn.config.progressMin == 100 -> 100
+                        else -> 50
                     }
+                    onTaskMove(entry.id, newProgress)
+                    dragTargetColumn = null
                     draggedEntry = null
-                }
+                },
+                isDropTarget = dragTargetColumn == column.config.id,
+                onDragStart = { draggedEntry = it }
             )
         }
     }
@@ -78,12 +96,22 @@ fun KanbanScreen(repository: TaskRepository) {
 fun KanbanColumnCard(
     column: KanbanColumn,
     onEntryClick: (CombinedEntry) -> Unit,
-    onDrop: (CombinedEntry) -> Unit
+    onDragOver: () -> Unit,
+    onDragLeave: () -> Unit,
+    onDrop: (CombinedEntry) -> Unit,
+    isDropTarget: Boolean = false,
+    onDragStart: (CombinedEntry) -> Unit
 ) {
     Card(
         modifier = Modifier
             .width(280.dp)
-            .fillMaxHeight(),
+            .fillMaxHeight()
+            .then(
+                if (isDropTarget) Modifier.background(
+                    Color(column.config.color).copy(alpha = 0.1f),
+                    RoundedCornerShape(12.dp)
+                ) else Modifier
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -94,11 +122,11 @@ fun KanbanColumnCard(
                 Box(
                     modifier = Modifier
                         .size(12.dp)
-                        .background(column.color, RoundedCornerShape(6.dp))
+                        .background(Color(column.config.color), RoundedCornerShape(6.dp))
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = column.title,
+                    text = column.config.title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -119,7 +147,8 @@ fun KanbanColumnCard(
                 items(column.entries, key = { it.id }) { entry ->
                     DraggableEntryCard(
                         entry = entry,
-                        onClick = { onEntryClick(entry) }
+                        onClick = { onEntryClick(entry) },
+                        onDragStart = { onDragStart(entry) }
                     )
                 }
             }
@@ -130,10 +159,12 @@ fun KanbanColumnCard(
 @Composable
 fun DraggableEntryCard(
     entry: CombinedEntry,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDragStart: () -> Unit
 ) {
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
@@ -141,15 +172,21 @@ fun DraggableEntryCard(
             .graphicsLayer {
                 translationX = offsetX
                 translationY = offsetY
+                alpha = if (isDragging) 0.8f else 1f
             }
             .pointerInput(Unit) {
                 detectDragGestures(
-                    onDragStart = { },
+                    onDragStart = {
+                        isDragging = true
+                        onDragStart()
+                    },
                     onDragEnd = {
+                        isDragging = false
                         offsetX = 0f
                         offsetY = 0f
                     },
                     onDragCancel = {
+                        isDragging = false
                         offsetX = 0f
                         offsetY = 0f
                     },
@@ -163,7 +200,7 @@ fun DraggableEntryCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 8.dp else 2.dp)
     ) {
         Column(
             modifier = Modifier.padding(8.dp)
@@ -192,3 +229,9 @@ fun DraggableEntryCard(
         }
     }
 }
+
+private val defaultColumns = listOf(
+    KanbanColumnConfig("todo", "To Do", 0xFF2196F3, 0, 0),
+    KanbanColumnConfig("inprogress", "In Progress", 0xFFFFC107, 1, 99),
+    KanbanColumnConfig("done", "Done", 0xFF4CAF50, 100, 100)
+)

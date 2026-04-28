@@ -1,0 +1,522 @@
+package com.jtx.desktop.data.local
+
+import com.jtx.desktop.domain.model.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.sql.Connection
+import java.sql.DriverManager
+import java.sql.ResultSet
+import java.sql.Statement
+
+class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
+
+    private var _journals = MutableStateFlow<List<JournalEntry>>(emptyList())
+    private var _notes = MutableStateFlow<List<NoteEntry>>(emptyList())
+    private var _tasks = MutableStateFlow<List<TaskEntry>>(emptyList())
+
+    private var settings = AppSettings()
+    private var settingsChanged = true
+
+    init {
+        initializeDatabase()
+        loadAllData()
+        loadSettings()
+    }
+
+    private fun initializeDatabase() {
+        useConnection { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS journals (
+                        id TEXT PRIMARY KEY,
+                        uid TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        dtstart INTEGER,
+                        dtend INTEGER,
+                        categories TEXT NOT NULL,
+                        created INTEGER NOT NULL,
+                        updated INTEGER NOT NULL,
+                        color TEXT,
+                        location TEXT,
+                        comment TEXT,
+                        archived INTEGER DEFAULT 0
+                    )
+                    """
+                )
+                stmt.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS notes (
+                        id TEXT PRIMARY KEY,
+                        uid TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        categories TEXT NOT NULL,
+                        created INTEGER NOT NULL,
+                        updated INTEGER NOT NULL,
+                        color TEXT,
+                        location TEXT,
+                        archived INTEGER DEFAULT 0
+                    )
+                    """
+                )
+                stmt.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS tasks (
+                        id TEXT PRIMARY KEY,
+                        uid TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        due INTEGER,
+                        start INTEGER,
+                        completed INTEGER NOT NULL,
+                        progress INTEGER NOT NULL,
+                        categories TEXT NOT NULL,
+                        created INTEGER NOT NULL,
+                        updated INTEGER NOT NULL,
+                        color TEXT,
+                        location TEXT,
+                        subtasks TEXT NOT NULL,
+                        related_entries TEXT NOT NULL,
+                        recurrence_rule TEXT,
+                        archived INTEGER DEFAULT 0
+                    )
+                    """
+                )
+                stmt.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    )
+                    """
+                )
+            }
+        }
+    }
+
+    private fun <T> useConnection(block: (Connection) -> T): T {
+        val conn = DriverManager.getConnection("jdbc:sqlite:$dbPath")
+        return try {
+            block(conn)
+        } finally {
+            conn.close()
+        }
+    }
+
+    private fun loadAllData() {
+        _journals.value = loadJournals()
+        _notes.value = loadNotes()
+        _tasks.value = loadTasks()
+    }
+
+    private fun loadJournals(): List<JournalEntry> = useConnection { conn ->
+        conn.createStatement().use { stmt ->
+            stmt.executeQuery("SELECT * FROM journals WHERE archived = 0").use { rs ->
+                val list = mutableListOf<JournalEntry>()
+                while (rs.next()) {
+                    list.add(journalFromResultSet(rs))
+                }
+                list
+            }
+        }
+    }
+
+    private fun loadNotes(): List<NoteEntry> = useConnection { conn ->
+        conn.createStatement().use { stmt ->
+            stmt.executeQuery("SELECT * FROM notes WHERE archived = 0").use { rs ->
+                val list = mutableListOf<NoteEntry>()
+                while (rs.next()) {
+                    list.add(noteFromResultSet(rs))
+                }
+                list
+            }
+        }
+    }
+
+    private fun loadTasks(): List<TaskEntry> = useConnection { conn ->
+        conn.createStatement().use { stmt ->
+            stmt.executeQuery("SELECT * FROM tasks WHERE archived = 0").use { rs ->
+                val list = mutableListOf<TaskEntry>()
+                while (rs.next()) {
+                    list.add(taskFromResultSet(rs))
+                }
+                list
+            }
+        }
+    }
+
+    private fun journalFromResultSet(rs: ResultSet): JournalEntry {
+        return JournalEntry(
+            id = rs.getString("id"),
+            uid = rs.getString("uid"),
+            title = rs.getString("title"),
+            description = rs.getString("description"),
+            dtstart = rs.getObject("dtstart") as? Long,
+            dtend = rs.getObject("dtend") as? Long,
+            categories = Json.decodeFromString(rs.getString("categories")),
+            created = rs.getLong("created"),
+            updated = rs.getLong("updated"),
+            color = rs.getString("color"),
+            location = rs.getString("location"),
+            comment = rs.getString("comment")
+        )
+    }
+
+    private fun noteFromResultSet(rs: ResultSet): NoteEntry {
+        return NoteEntry(
+            id = rs.getString("id"),
+            uid = rs.getString("uid"),
+            title = rs.getString("title"),
+            description = rs.getString("description"),
+            categories = Json.decodeFromString(rs.getString("categories")),
+            created = rs.getLong("created"),
+            updated = rs.getLong("updated"),
+            color = rs.getString("color"),
+            location = rs.getString("location")
+        )
+    }
+
+    private fun taskFromResultSet(rs: ResultSet): TaskEntry {
+        return TaskEntry(
+            id = rs.getString("id"),
+            uid = rs.getString("uid"),
+            title = rs.getString("title"),
+            description = rs.getString("description"),
+            due = rs.getObject("due") as? Long,
+            start = rs.getObject("start") as? Long,
+            completed = rs.getInt("completed") == 1,
+            progress = rs.getInt("progress"),
+            categories = Json.decodeFromString(rs.getString("categories")),
+            created = rs.getLong("created"),
+            updated = rs.getLong("updated"),
+            color = rs.getString("color"),
+            location = rs.getString("location"),
+            subtasks = Json.decodeFromString(rs.getString("subtasks")),
+            relatedEntries = Json.decodeFromString(rs.getString("related_entries")),
+            recurrenceRule = rs.getString("recurrence_rule")?.let { Json.decodeFromString(it) }
+        )
+    }
+
+    override fun getAllJournals(): Flow<List<JournalEntry>> = _journals.asStateFlow()
+    override fun getAllNotes(): Flow<List<NoteEntry>> = _notes.asStateFlow()
+    override fun getAllTasks(): Flow<List<TaskEntry>> = _tasks.asStateFlow()
+
+    override suspend fun getJournalById(id: String): JournalEntry? = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("SELECT * FROM journals WHERE id = ?").use { ps ->
+                ps.setString(1, id)
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) journalFromResultSet(rs) else null
+                }
+            }
+        }
+    }
+
+    override suspend fun getNoteById(id: String): NoteEntry? = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("SELECT * FROM notes WHERE id = ?").use { ps ->
+                ps.setString(1, id)
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) noteFromResultSet(rs) else null
+                }
+            }
+        }
+    }
+
+    override suspend fun getTaskById(id: String): TaskEntry? = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("SELECT * FROM tasks WHERE id = ?").use { ps ->
+                ps.setString(1, id)
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) taskFromResultSet(rs) else null
+                }
+            }
+        }
+    }
+
+    override suspend fun insertJournal(entry: JournalEntry) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement(
+                """INSERT OR REPLACE INTO journals
+                   (id, uid, title, description, dtstart, dtend, categories, created, updated, color, location, comment, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"""
+            ).use { ps ->
+                ps.setString(1, entry.id)
+                ps.setString(2, entry.uid)
+                ps.setString(3, entry.title)
+                ps.setString(4, entry.description)
+                ps.setObject(5, entry.dtstart)
+                ps.setObject(6, entry.dtend)
+                ps.setString(7, Json.encodeToString(entry.categories))
+                ps.setLong(8, entry.created)
+                ps.setLong(9, entry.updated)
+                ps.setString(10, entry.color)
+                ps.setString(11, entry.location)
+                ps.setString(12, entry.comment)
+                ps.executeUpdate()
+            }
+        }
+        _journals.value = loadJournals()
+    }
+
+    override suspend fun insertNote(entry: NoteEntry) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement(
+                """INSERT OR REPLACE INTO notes
+                   (id, uid, title, description, categories, created, updated, color, location, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"""
+            ).use { ps ->
+                ps.setString(1, entry.id)
+                ps.setString(2, entry.uid)
+                ps.setString(3, entry.title)
+                ps.setString(4, entry.description)
+                ps.setString(5, Json.encodeToString(entry.categories))
+                ps.setLong(6, entry.created)
+                ps.setLong(7, entry.updated)
+                ps.setString(8, entry.color)
+                ps.setString(9, entry.location)
+                ps.executeUpdate()
+            }
+        }
+        _notes.value = loadNotes()
+    }
+
+    override suspend fun insertTask(entry: TaskEntry) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement(
+                """INSERT OR REPLACE INTO tasks
+                   (id, uid, title, description, due, start, completed, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"""
+            ).use { ps ->
+                ps.setString(1, entry.id)
+                ps.setString(2, entry.uid)
+                ps.setString(3, entry.title)
+                ps.setString(4, entry.description)
+                ps.setObject(5, entry.due)
+                ps.setObject(6, entry.start)
+                ps.setInt(7, if (entry.completed) 1 else 0)
+                ps.setInt(8, entry.progress)
+                ps.setString(9, Json.encodeToString(entry.categories))
+                ps.setLong(10, entry.created)
+                ps.setLong(11, entry.updated)
+                ps.setString(12, entry.color)
+                ps.setString(13, entry.location)
+                ps.setString(14, Json.encodeToString(entry.subtasks))
+                ps.setString(15, Json.encodeToString(entry.relatedEntries))
+                ps.setString(16, entry.recurrenceRule?.let { Json.encodeToString(it) })
+                ps.executeUpdate()
+            }
+        }
+        _tasks.value = loadTasks()
+    }
+
+    override suspend fun updateJournal(entry: JournalEntry) {
+        insertJournal(entry)
+    }
+
+    override suspend fun updateNote(entry: NoteEntry) {
+        insertNote(entry)
+    }
+
+    override suspend fun updateTask(entry: TaskEntry) {
+        insertTask(entry)
+    }
+
+    override suspend fun deleteJournal(id: String) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("UPDATE journals SET archived = 1 WHERE id = ?").use { ps ->
+                ps.setString(1, id)
+                ps.executeUpdate()
+            }
+        }
+        _journals.value = loadJournals()
+    }
+
+    override suspend fun deleteNote(id: String) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("UPDATE notes SET archived = 1 WHERE id = ?").use { ps ->
+                ps.setString(1, id)
+                ps.executeUpdate()
+            }
+        }
+        _notes.value = loadNotes()
+    }
+
+    override suspend fun deleteTask(id: String) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("UPDATE tasks SET archived = 1 WHERE id = ?").use { ps ->
+                ps.setString(1, id)
+                ps.executeUpdate()
+            }
+        }
+        _tasks.value = loadTasks()
+    }
+
+    override suspend fun getSettings(): AppSettings = withContext(Dispatchers.IO) {
+        settings
+    }
+
+    override suspend fun saveSettings(newSettings: AppSettings) {
+        withContext(Dispatchers.IO) {
+            settings = newSettings
+            settingsChanged = true
+            useConnection { conn ->
+                conn.prepareStatement("INSERT OR REPLACE INTO settings (key, value) VALUES ('app_settings', ?)").use { ps ->
+                    ps.setString(1, Json.encodeToString(newSettings))
+                    ps.executeUpdate()
+                }
+            }
+        }
+    }
+
+    private fun loadSettings() {
+        useConnection { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT value FROM settings WHERE key = 'app_settings'").use { rs ->
+                    if (rs.next()) {
+                        try {
+                            settings = Json.decodeFromString(rs.getString("value"))
+                        } catch (e: Exception) {
+                            // Use defaults
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    suspend fun getArchivedJournals(): List<JournalEntry> = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT * FROM journals WHERE archived = 1").use { rs ->
+                    val list = mutableListOf<JournalEntry>()
+                    while (rs.next()) {
+                        list.add(journalFromResultSet(rs))
+                    }
+                    list
+                }
+            }
+        }
+    }
+
+    suspend fun getArchivedNotes(): List<NoteEntry> = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT * FROM notes WHERE archived = 1").use { rs ->
+                    val list = mutableListOf<NoteEntry>()
+                    while (rs.next()) {
+                        list.add(noteFromResultSet(rs))
+                    }
+                    list
+                }
+            }
+        }
+    }
+
+    suspend fun getArchivedTasks(): List<TaskEntry> = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT * FROM tasks WHERE archived = 1").use { rs ->
+                    val list = mutableListOf<TaskEntry>()
+                    while (rs.next()) {
+                        list.add(taskFromResultSet(rs))
+                    }
+                    list
+                }
+            }
+        }
+    }
+
+    suspend fun permanentlyDeleteJournal(id: String) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("DELETE FROM journals WHERE id = ?").use { ps ->
+                ps.setString(1, id)
+                ps.executeUpdate()
+            }
+        }
+        _journals.value = loadJournals()
+    }
+
+    suspend fun permanentlyDeleteNote(id: String) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("DELETE FROM notes WHERE id = ?").use { ps ->
+                ps.setString(1, id)
+                ps.executeUpdate()
+            }
+        }
+        _notes.value = loadNotes()
+    }
+
+    suspend fun permanentlyDeleteTask(id: String) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("DELETE FROM tasks WHERE id = ?").use { ps ->
+                ps.setString(1, id)
+                ps.executeUpdate()
+            }
+        }
+        _tasks.value = loadTasks()
+    }
+
+    suspend fun restoreFromArchive(type: EntryType, id: String) = withContext(Dispatchers.IO) {
+        val table = when (type) {
+            EntryType.JOURNAL -> "journals"
+            EntryType.NOTE -> "notes"
+            EntryType.TASK -> "tasks"
+        }
+        useConnection { conn ->
+            conn.prepareStatement("UPDATE $table SET archived = 0 WHERE id = ?").use { ps ->
+                ps.setString(1, id)
+                ps.executeUpdate()
+            }
+        }
+        loadAllData()
+    }
+
+    fun exportAllData(): String = useConnection { conn ->
+        val export = mutableMapOf<String, Any>()
+        conn.createStatement().use { stmt ->
+            stmt.executeQuery("SELECT * FROM journals").use { rs ->
+                val journals = mutableListOf<JournalEntry>()
+                while (rs.next()) journals.add(journalFromResultSet(rs))
+                export["journals"] = journals
+            }
+            stmt.executeQuery("SELECT * FROM notes").use { rs ->
+                val notes = mutableListOf<NoteEntry>()
+                while (rs.next()) notes.add(noteFromResultSet(rs))
+                export["notes"] = notes
+            }
+            stmt.executeQuery("SELECT * FROM tasks").use { rs ->
+                val tasks = mutableListOf<TaskEntry>()
+                while (rs.next()) tasks.add(taskFromResultSet(rs))
+                export["tasks"] = tasks
+            }
+        }
+        Json.encodeToString(export)
+    }
+
+    suspend fun importData(json: String) = withContext(Dispatchers.IO) {
+        try {
+            @Suppress("UNCHECKED_CAST")
+            val data = Json.decodeFromString<Map<String, Any>>(json)
+            (data["journals"] as? List<*>)?.forEach {
+                if (it is JournalEntry) insertJournal(it)
+            }
+            (data["notes"] as? List<*>)?.forEach {
+                if (it is NoteEntry) insertNote(it)
+            }
+            (data["tasks"] as? List<*>)?.forEach {
+                if (it is TaskEntry) insertTask(it)
+            }
+            loadAllData()
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Invalid import data: ${e.message}")
+        }
+    }
+}

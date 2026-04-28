@@ -2,11 +2,9 @@ package com.jtx.desktop
 
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.window.WindowState
-import com.jtx.desktop.data.local.InMemoryLocalDataSource
+import com.jtx.desktop.data.local.SqliteLocalDataSource
 import com.jtx.desktop.data.remote.CalDavClient
 import com.jtx.desktop.data.remote.ICalendarParser
 import com.jtx.desktop.data.repository.SyncRepository
@@ -15,7 +13,7 @@ import java.awt.Dimension
 
 fun main() = application {
     val windowState = WindowState()
-    val localDataSource = InMemoryLocalDataSource()
+    val localDataSource = SqliteLocalDataSource("jtx_board.db")
     val calDavClient = CalDavClient()
     val parser = ICalendarParser()
     val syncRepository = SyncRepository(localDataSource, calDavClient, parser)
