@@ -285,11 +285,13 @@ class ICalendarParser {
             var recurrenceId: Long? = null
             var recurrenceTimezone: String? = null
             var recurrenceIdTimezone: String? = null
+            var reminders = emptyList<Reminder>()
             var unknownProperties = emptyList<UnknownProperty>()
             val knownProperties = commonKnownProperties + listOf(
                 "DUE", "DTSTART", "STATUS", "PERCENT-COMPLETE", "PRIORITY", "RRULE", "RDATE", "EXDATE",
-                "RECURRENCE-ID", "LOCATION", "COMMENT"
+                "RECURRENCE-ID", "LOCATION", "COMMENT", "VALARM", "TRIGGER", "ACTION"
             )
+            reminders = parseAlarms(lines)
 
             for (line in lines) {
                 if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
@@ -329,6 +331,7 @@ class ICalendarParser {
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
                     line.isProperty("LOCATION") -> location = line.propertyTextValue()
                     line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
+                    line.isProperty("COLOR") -> color = line.propertyValue()
                     line.isProperty("RELATED-TO") -> relatedEntries = relatedEntries + line.propertyValue()
                     line.isProperty("ATTACH") -> attachments = attachments + parseAttachment(line)
                     line.isProperty("COMMENT") -> comments = comments + EntryComment(line.propertyTextValue())
@@ -345,6 +348,7 @@ class ICalendarParser {
                 color = color, location = location, subtasks = emptyList(), relatedEntries = relatedEntries,
                 priority = priority, recurrenceRule = recurrenceRule, recurrenceDates = recurrenceDates,
                 exceptionDates = exceptionDates, recurrenceId = recurrenceId,
+                reminders = reminders,
                 dueTimezone = dueTimezone, startTimezone = startTimezone,
                 recurrenceTimezone = recurrenceTimezone, recurrenceIdTimezone = recurrenceIdTimezone,
                 attachments = attachments, comments = comments,
@@ -514,6 +518,7 @@ class ICalendarParser {
             entry.comments.forEach { appendLine("COMMENT:${it.text.escapeIcsText()}") }
             entry.relatedEntries.forEach { appendLine("RELATED-TO:$it") }
             entry.attachments.forEach { appendLine(it.toIcsAttach()) }
+            entry.reminders.forEach { appendLine(it.toIcsAlarm()) }
             entry.unknownProperties.forEach { appendLine(it.line) }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
@@ -724,6 +729,46 @@ class ICalendarParser {
         )
     }
 
+    private fun parseAlarms(lines: List<String>): List<Reminder> {
+        val reminders = mutableListOf<Reminder>()
+        var inAlarm = false
+        var trigger: String? = null
+        var soundEnabled = false
+
+        for (line in lines) {
+            when {
+                line.equals("BEGIN:VALARM", ignoreCase = true) -> {
+                    inAlarm = true
+                    trigger = null
+                    soundEnabled = false
+                }
+                line.equals("END:VALARM", ignoreCase = true) -> {
+                    parseReminderMinutes(trigger)?.let { minutes ->
+                        reminders.add(Reminder(minutesBefore = minutes, soundEnabled = soundEnabled))
+                    }
+                    inAlarm = false
+                }
+                inAlarm && line.isProperty("TRIGGER") -> trigger = line.propertyValue()
+                inAlarm && line.isProperty("ACTION") -> soundEnabled = line.propertyValue().equals("AUDIO", ignoreCase = true)
+            }
+        }
+
+        return reminders
+    }
+
+    private fun parseReminderMinutes(trigger: String?): Int? {
+        if (trigger.isNullOrBlank() || !trigger.startsWith("-P", ignoreCase = true)) return null
+        val value = trigger.uppercase().removePrefix("-P")
+        var minutes = 0
+        val dayMatch = Regex("(\\d+)D").find(value)
+        val hourMatch = Regex("(\\d+)H").find(value)
+        val minuteMatch = Regex("(\\d+)M").find(value)
+        minutes += (dayMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0) * 24 * 60
+        minutes += (hourMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0) * 60
+        minutes += minuteMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        return minutes.takeIf { it > 0 }
+    }
+
     private fun String?.toIcsTimezoneParam(): String {
         return if (this.isNullOrBlank()) "" else ";TZID=$this"
     }
@@ -735,6 +780,27 @@ class ICalendarParser {
             if (!filename.isNullOrBlank()) append(";FILENAME=$filename")
             if (size != null) append(";SIZE=$size")
             append(":$uri")
+        }
+    }
+
+    private fun Reminder.toIcsAlarm(): String {
+        val days = minutesBefore / (24 * 60)
+        val hours = (minutesBefore % (24 * 60)) / 60
+        val minutes = minutesBefore % 60
+        val duration = buildString {
+            append("-P")
+            if (days > 0) append("${days}D")
+            if (hours > 0 || minutes > 0) {
+                append("T")
+                if (hours > 0) append("${hours}H")
+                if (minutes > 0) append("${minutes}M")
+            }
+        }
+        return buildString {
+            appendLine("BEGIN:VALARM")
+            appendLine("ACTION:${if (soundEnabled) "AUDIO" else "DISPLAY"}")
+            appendLine("TRIGGER:$duration")
+            append("END:VALARM")
         }
     }
 
