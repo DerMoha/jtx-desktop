@@ -89,6 +89,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                         subtasks TEXT NOT NULL,
                         related_entries TEXT NOT NULL,
                         recurrence_rule TEXT,
+                        priority TEXT NOT NULL DEFAULT 'NONE',
                         archived INTEGER DEFAULT 0
                     )
                     """
@@ -136,6 +137,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 )
                 addColumnIfMissing(stmt, "journals", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
                 addColumnIfMissing(stmt, "notes", "description_format", "TEXT NOT NULL DEFAULT 'PLAIN'")
+                addColumnIfMissing(stmt, "tasks", "priority", "TEXT NOT NULL DEFAULT 'NONE'")
             }
         }
     }
@@ -258,6 +260,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             subtasks = Json.decodeFromString(rs.getString("subtasks")),
             relatedEntries = Json.decodeFromString(rs.getString("related_entries")),
             recurrenceRule = rs.getString("recurrence_rule")?.let { Json.decodeFromString(it) },
+            priority = Priority.valueOf(rs.getString("priority")),
             archived = rs.getInt("archived") == 1
         )
     }
@@ -451,8 +454,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         useConnection { conn ->
             conn.prepareStatement(
                 """INSERT OR REPLACE INTO tasks
-                   (id, uid, title, description, due, start, completed, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                   (id, uid, title, description, due, start, completed, progress, categories, created, updated, color, location, subtasks, related_entries, recurrence_rule, priority, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             ).use { ps ->
                 ps.setString(1, entry.id)
                 ps.setString(2, entry.uid)
@@ -470,7 +473,8 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(14, Json.encodeToString(entry.subtasks))
                 ps.setString(15, Json.encodeToString(entry.relatedEntries))
                 ps.setString(16, entry.recurrenceRule?.let { Json.encodeToString(it) })
-                ps.setInt(17, if (entry.archived) 1 else 0)
+                ps.setString(17, entry.priority.name)
+                ps.setInt(18, if (entry.archived) 1 else 0)
                 ps.executeUpdate()
             }
         }

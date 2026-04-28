@@ -220,6 +220,7 @@ class ICalendarParser {
             var dtstamp: Long? = null
             var color: String? = null
             var location: String? = null
+            var priority = Priority.NONE
 
             for (line in lines) {
                 when {
@@ -233,6 +234,7 @@ class ICalendarParser {
                     line.startsWith("DTSTART") -> start = parseIcsDate(line)
                     line.startsWith("STATUS:COMPLETED") -> completed = true
                     line.startsWith("PERCENT-COMPLETE:") -> progress = line.substringAfter("PERCENT-COMPLETE:").trim().toIntOrNull() ?: 0
+                    line.startsWith("PRIORITY:") -> priority = parsePriority(line.substringAfter("PRIORITY:").trim())
                     line.startsWith("CATEGORIES:") -> categories = line.substringAfter("CATEGORIES:").trim().split(",").map { it.trim() }.toMutableList()
                     line.startsWith("CREATED:") -> created = parseIcsDate(line)
                     line.startsWith("DTSTAMP:") -> dtstamp = parseIcsDate(line)
@@ -248,7 +250,8 @@ class ICalendarParser {
                 due = due, start = start, completed = completed, progress = progress,
                 categories = categories, created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
-                color = color, location = location, subtasks = emptyList(), relatedEntries = emptyList()
+                color = color, location = location, subtasks = emptyList(), relatedEntries = emptyList(),
+                priority = priority
             )
         } catch (e: Exception) { null }
     }
@@ -329,6 +332,7 @@ class ICalendarParser {
             if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description}")
             if (entry.completed) appendLine("STATUS:COMPLETED")
             appendLine("PERCENT-COMPLETE:${entry.progress}")
+            if (entry.priority != Priority.NONE) appendLine("PRIORITY:${entry.priority.toIcsPriority()}")
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",")}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
@@ -377,6 +381,27 @@ class ICalendarParser {
                 }.timeInMillis
             } else null
         } catch (e: Exception) { null }
+    }
+
+    private fun parsePriority(value: String): Priority {
+        return when (value.toIntOrNull()) {
+            null, 0 -> Priority.NONE
+            1 -> Priority.URGENT
+            in 2..4 -> Priority.HIGH
+            5 -> Priority.MEDIUM
+            in 6..9 -> Priority.LOW
+            else -> Priority.NONE
+        }
+    }
+
+    private fun Priority.toIcsPriority(): Int {
+        return when (this) {
+            Priority.NONE -> 0
+            Priority.URGENT -> 1
+            Priority.HIGH -> 3
+            Priority.MEDIUM -> 5
+            Priority.LOW -> 9
+        }
     }
 
     private fun formatIcsDate(timestamp: Long): String {
