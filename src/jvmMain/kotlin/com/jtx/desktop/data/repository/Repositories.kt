@@ -202,13 +202,16 @@ class SyncRepository(
                 val conflicts = mutableListOf<SyncConflictInfo>()
 
                 for (href in hrefs) {
+                    if (!settings.syncJournals && href.contains(".ics") && !href.contains("VTODO") && !href.contains("VJOURNAL") && !href.contains("VNOTE")) {
+                        continue
+                    }
                     val fetchDataResult = calDavClient.fetchCalendarData(credentials, href)
                     fetchDataResult.fold(
                         onSuccess = { data ->
                             val entry = when {
-                                data.contains("BEGIN:VJOURNAL") -> parser.parseVJournal(data)
-                                data.contains("BEGIN:VTODO") -> parser.parseVTodo(data)
-                                data.contains("BEGIN:VNOTE") -> parser.parseVNote(data)
+                                data.contains("BEGIN:VJOURNAL") && settings.syncJournals -> parser.parseVJournal(data)
+                                data.contains("BEGIN:VTODO") && settings.syncTasks -> parser.parseVTodo(data)
+                                data.contains("BEGIN:VNOTE") && settings.syncNotes -> parser.parseVNote(data)
                                 else -> null
                             }
                             when (entry) {
