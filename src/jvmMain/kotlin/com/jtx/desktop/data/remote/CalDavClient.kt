@@ -194,7 +194,9 @@ class ICalendarParser {
             var summary = ""
             var description = ""
             var dtstart: Long? = null
+            var startTimezone: String? = null
             var dtend: Long? = null
+            var endTimezone: String? = null
             var categories = mutableListOf<String>()
             var created: Long? = null
             var dtstamp: Long? = null
@@ -216,8 +218,14 @@ class ICalendarParser {
                         val value = line.propertyTextValue()
                         if (description.isEmpty()) description = value else description += value
                     }
-                    line.isProperty("DTSTART") -> dtstart = parseIcsDate(line)
-                    line.isProperty("DTEND") -> dtend = parseIcsDate(line)
+                    line.isProperty("DTSTART") -> {
+                        dtstart = parseIcsDate(line)
+                        startTimezone = parseTimezone(line)
+                    }
+                    line.isProperty("DTEND") -> {
+                        dtend = parseIcsDate(line)
+                        endTimezone = parseTimezone(line)
+                    }
                     line.isProperty("CATEGORIES") -> categories = parseIcsTextList(line.propertyValue()).toMutableList()
                     line.isProperty("CREATED") -> created = parseIcsDate(line)
                     line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
@@ -237,7 +245,8 @@ class ICalendarParser {
 
             JournalEntry(
                 id = uid, uid = uid, title = summary, description = description,
-                dtstart = dtstart, dtend = dtend, categories = categories,
+                dtstart = dtstart, startTimezone = startTimezone,
+                dtend = dtend, endTimezone = endTimezone, categories = categories,
                 created = created ?: System.currentTimeMillis(),
                 updated = dtstamp ?: System.currentTimeMillis(),
                 color = color, location = location, comment = comment,
@@ -254,7 +263,9 @@ class ICalendarParser {
             var summary = ""
             var description = ""
             var due: Long? = null
+            var dueTimezone: String? = null
             var start: Long? = null
+            var startTimezone: String? = null
             var completed = false
             var progress = 0
             var categories = mutableListOf<String>()
@@ -287,8 +298,14 @@ class ICalendarParser {
                         val value = line.propertyTextValue()
                         if (description.isEmpty()) description = value else description += value
                     }
-                    line.isProperty("DUE") -> due = parseIcsDate(line)
-                    line.isProperty("DTSTART") -> start = parseIcsDate(line)
+                    line.isProperty("DUE") -> {
+                        due = parseIcsDate(line)
+                        dueTimezone = parseTimezone(line)
+                    }
+                    line.isProperty("DTSTART") -> {
+                        start = parseIcsDate(line)
+                        startTimezone = parseTimezone(line)
+                    }
                     line.isProperty("STATUS") && line.propertyValue().equals("COMPLETED", ignoreCase = true) -> completed = true
                     line.isProperty("PERCENT-COMPLETE") -> progress = line.propertyValue().toIntOrNull() ?: 0
                     line.isProperty("PRIORITY") -> priority = parsePriority(line.propertyValue())
@@ -326,6 +343,7 @@ class ICalendarParser {
                 color = color, location = location, subtasks = emptyList(), relatedEntries = relatedEntries,
                 priority = priority, recurrenceRule = recurrenceRule, recurrenceDates = recurrenceDates,
                 exceptionDates = exceptionDates, recurrenceId = recurrenceId,
+                dueTimezone = dueTimezone, startTimezone = startTimezone,
                 recurrenceTimezone = recurrenceTimezone, recurrenceIdTimezone = recurrenceIdTimezone,
                 attachments = attachments, comments = comments,
                 unknownProperties = unknownProperties
@@ -399,8 +417,8 @@ class ICalendarParser {
             appendLine("BEGIN:VJOURNAL")
             appendLine("UID:${entry.uid}")
             appendLine("DTSTAMP:${formatIcsDate(entry.updated)}")
-            if (entry.dtstart != null) appendLine("DTSTART:${formatIcsDate(entry.dtstart)}")
-            if (entry.dtend != null) appendLine("DTEND:${formatIcsDate(entry.dtend)}")
+            if (entry.dtstart != null) appendLine("DTSTART${entry.startTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.dtstart, entry.startTimezone)}")
+            if (entry.dtend != null) appendLine("DTEND${entry.endTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.dtend, entry.endTimezone)}")
             appendLine("SUMMARY:${entry.title.escapeIcsText()}")
             if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description.escapeIcsText()}")
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",") { it.escapeIcsText() }}")
@@ -427,17 +445,17 @@ class ICalendarParser {
             appendLine("BEGIN:VTODO")
             appendLine("UID:${entry.uid}")
             appendLine("DTSTAMP:${formatIcsDate(entry.updated)}")
-            if (entry.start != null) appendLine("DTSTART:${formatIcsDate(entry.start)}")
-            if (entry.due != null) appendLine("DUE:${formatIcsDate(entry.due)}")
+            if (entry.start != null) appendLine("DTSTART${entry.startTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.start, entry.startTimezone)}")
+            if (entry.due != null) appendLine("DUE${entry.dueTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.due, entry.dueTimezone)}")
             appendLine("SUMMARY:${entry.title.escapeIcsText()}")
             if (entry.description.isNotEmpty()) appendLine("DESCRIPTION:${entry.description.escapeIcsText()}")
             if (entry.completed) appendLine("STATUS:COMPLETED")
             appendLine("PERCENT-COMPLETE:${entry.progress}")
             if (entry.priority != Priority.NONE) appendLine("PRIORITY:${entry.priority.toIcsPriority()}")
             entry.recurrenceRule?.let { appendLine("RRULE:${it.toIcsRRule()}") }
-            if (entry.recurrenceDates.isNotEmpty()) appendLine("RDATE${entry.recurrenceTimezone.toIcsTimezoneParam()}:${entry.recurrenceDates.joinToString(",") { formatIcsDate(it) }}")
-            if (entry.exceptionDates.isNotEmpty()) appendLine("EXDATE${entry.recurrenceTimezone.toIcsTimezoneParam()}:${entry.exceptionDates.joinToString(",") { formatIcsDate(it) }}")
-            if (entry.recurrenceId != null) appendLine("RECURRENCE-ID${entry.recurrenceIdTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.recurrenceId)}")
+            if (entry.recurrenceDates.isNotEmpty()) appendLine("RDATE${entry.recurrenceTimezone.toIcsTimezoneParam()}:${entry.recurrenceDates.joinToString(",") { formatIcsDate(it, entry.recurrenceTimezone) }}")
+            if (entry.exceptionDates.isNotEmpty()) appendLine("EXDATE${entry.recurrenceTimezone.toIcsTimezoneParam()}:${entry.exceptionDates.joinToString(",") { formatIcsDate(it, entry.recurrenceTimezone) }}")
+            if (entry.recurrenceId != null) appendLine("RECURRENCE-ID${entry.recurrenceIdTimezone.toIcsTimezoneParam()}:${formatIcsDate(entry.recurrenceId, entry.recurrenceIdTimezone)}")
             if (entry.categories.isNotEmpty()) appendLine("CATEGORIES:${entry.categories.joinToString(",") { it.escapeIcsText() }}")
             if (entry.color != null) appendLine("COLOR:${entry.color}")
             if (entry.location != null) appendLine("X-APPLE-STRUCTURED-LOCATION;VALUE=URI:${entry.location}")
@@ -687,15 +705,18 @@ class ICalendarParser {
         }
     }
 
-    private fun formatIcsDate(timestamp: Long): String {
-        val cal = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
-        return String.format("%04d%02d%02dT%02d%02d%02dZ",
+    private fun formatIcsDate(timestamp: Long, timezone: String? = null): String {
+        val cal = java.util.Calendar.getInstance(timezone?.let { java.util.TimeZone.getTimeZone(it) } ?: java.util.TimeZone.getTimeZone("UTC")).apply {
+            timeInMillis = timestamp
+        }
+        return String.format("%04d%02d%02dT%02d%02d%02d%s",
             cal.get(java.util.Calendar.YEAR),
             cal.get(java.util.Calendar.MONTH) + 1,
             cal.get(java.util.Calendar.DAY_OF_MONTH),
             cal.get(java.util.Calendar.HOUR_OF_DAY),
             cal.get(java.util.Calendar.MINUTE),
-            cal.get(java.util.Calendar.SECOND)
+            cal.get(java.util.Calendar.SECOND),
+            if (timezone.isNullOrBlank()) "Z" else ""
         )
     }
 }
