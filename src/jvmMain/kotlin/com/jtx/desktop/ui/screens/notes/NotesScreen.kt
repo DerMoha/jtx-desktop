@@ -352,6 +352,7 @@ fun NoteEditDialog(
                     value = relatedEntries,
                     onValueChange = { relatedEntries = it },
                     label = { Text("Related task IDs") },
+                    supportingText = { Text("Comma or line separated IDs to link or unlink entries") },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -368,7 +369,7 @@ fun NoteEditDialog(
                         location = location.ifBlank { null },
                         comments = comments.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { EntryComment(it) },
                         attachments = attachments.toCsvList().map { EntryAttachment(uri = it) },
-                        relatedEntries = relatedEntries.toCsvList()
+                        relatedEntries = relatedEntries.toTokenList()
                     )
                 )
             }) {

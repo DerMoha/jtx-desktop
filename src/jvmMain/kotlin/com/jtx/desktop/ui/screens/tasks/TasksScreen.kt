@@ -645,6 +645,7 @@ fun TaskEditDialog(
                     value = relatedEntries,
                     onValueChange = { relatedEntries = it },
                     label = { Text("Related entry IDs") },
+                    supportingText = { Text("Comma or line separated IDs to link or unlink entries") },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -677,7 +678,7 @@ fun TaskEditDialog(
                         subtasks = subtasks.toSubtasks(entry.subtasks),
                         comments = comments.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { EntryComment(it) },
                         attachments = attachments.toCsvList().map { EntryAttachment(uri = it) },
-                        relatedEntries = relatedEntries.toCsvList()
+                        relatedEntries = relatedEntries.toTokenList()
                     )
                 )
             }) {
