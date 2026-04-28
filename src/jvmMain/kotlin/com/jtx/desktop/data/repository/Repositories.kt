@@ -89,6 +89,7 @@ class JournalRepository(private val local: LocalDataSource) {
     }
     suspend fun restore(id: String) {
         local.restoreFromArchive(EntryType.JOURNAL, id)
+        local.getJournalById(id)?.let { local.markDirty(it, EntryType.JOURNAL) }
         onDataChange?.invoke()
     }
     suspend fun permanentlyDelete(id: String) {
@@ -172,6 +173,7 @@ class NoteRepository(private val local: LocalDataSource) {
     }
     suspend fun restore(id: String) {
         local.restoreFromArchive(EntryType.NOTE, id)
+        local.getNoteById(id)?.let { local.markDirty(it, EntryType.NOTE) }
         onDataChange?.invoke()
     }
     suspend fun permanentlyDelete(id: String) {
@@ -292,6 +294,7 @@ class TaskRepository(private val local: LocalDataSource) {
     }
     suspend fun restore(id: String) {
         local.restoreFromArchive(EntryType.TASK, id)
+        local.getTaskById(id)?.let { local.markDirty(it, EntryType.TASK) }
         onDataChange?.invoke()
     }
     suspend fun permanentlyDelete(id: String) {
