@@ -104,6 +104,7 @@ data class CombinedEntry(
     val title: String,
     val description: String,
     val date: Long?,
+    val modified: Long? = null,
     val categories: List<String>,
     val color: String?,
     val progress: Int?,

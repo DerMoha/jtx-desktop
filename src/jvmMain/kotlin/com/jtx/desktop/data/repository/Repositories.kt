@@ -23,6 +23,7 @@ class JournalRepository(private val local: LocalDataSource) {
                 title = journal.title,
                 description = journal.description,
                 date = journal.dtstart,
+                modified = journal.updated,
                 categories = journal.categories,
                 color = journal.color,
                 progress = null,
@@ -43,10 +44,12 @@ class JournalRepository(private val local: LocalDataSource) {
     }
     suspend fun updateJournal(combined: CombinedEntry) {
         val existing = local.getJournalById(combined.id) ?: return
+        val now = System.currentTimeMillis()
         local.updateJournal(existing.copy(
             title = combined.title,
             description = combined.description,
-            archived = combined.archived
+            archived = combined.archived,
+            updated = now
         ))
         onDataChange?.invoke()
     }
@@ -80,6 +83,7 @@ class NoteRepository(private val local: LocalDataSource) {
                 title = note.title,
                 description = note.description,
                 date = null,
+                modified = note.updated,
                 categories = note.categories,
                 color = note.color,
                 progress = null,
@@ -100,10 +104,12 @@ class NoteRepository(private val local: LocalDataSource) {
     }
     suspend fun updateNote(combined: CombinedEntry) {
         val existing = local.getNoteById(combined.id) ?: return
+        val now = System.currentTimeMillis()
         local.updateNote(existing.copy(
             title = combined.title,
             description = combined.description,
-            archived = combined.archived
+            archived = combined.archived,
+            updated = now
         ))
         onDataChange?.invoke()
     }
@@ -137,6 +143,7 @@ class TaskRepository(private val local: LocalDataSource) {
                 title = task.title,
                 description = task.description,
                 date = task.due,
+                modified = task.updated,
                 categories = task.categories,
                 color = task.color,
                 progress = task.progress,
@@ -157,25 +164,28 @@ class TaskRepository(private val local: LocalDataSource) {
     }
     suspend fun updateTask(combined: CombinedEntry) {
         val existing = local.getTaskById(combined.id) ?: return
+        val now = System.currentTimeMillis()
         local.updateTask(existing.copy(
             title = combined.title,
             description = combined.description,
             progress = combined.progress ?: 0,
             completed = combined.completed ?: false,
-            archived = combined.archived
+            archived = combined.archived,
+            updated = now
         ))
         onDataChange?.invoke()
     }
     suspend fun updateTaskCompleted(id: String, completed: Boolean) {
         val existing = local.getTaskById(id) ?: return
-        local.updateTask(existing.copy(completed = completed))
+        local.updateTask(existing.copy(completed = completed, updated = System.currentTimeMillis()))
         onDataChange?.invoke()
     }
     suspend fun updateTaskProgress(id: String, progress: Int) {
         val existing = local.getTaskById(id) ?: return
         local.updateTask(existing.copy(
             progress = progress,
-            completed = progress >= 100
+            completed = progress >= 100,
+            updated = System.currentTimeMillis()
         ))
         onDataChange?.invoke()
     }

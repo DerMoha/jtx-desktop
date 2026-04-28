@@ -128,6 +128,7 @@ fun JtxApp(
                 EntryType.TASK -> due
                 EntryType.NOTE -> null
             },
+            modified = now,
             categories = categories,
             color = color,
             progress = if (type == EntryType.TASK) 0 else null,

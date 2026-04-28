@@ -66,8 +66,8 @@ fun TasksScreen(
             SortOrder.DATE_ASC -> searched.sortedBy { it.date ?: 0 }
             SortOrder.TITLE_ASC -> searched.sortedBy { it.title.lowercase() }
             SortOrder.TITLE_DESC -> searched.sortedByDescending { it.title.lowercase() }
-            SortOrder.MODIFIED_DESC -> searched.sortedByDescending { it.date ?: 0 }
-            SortOrder.MODIFIED_ASC -> searched.sortedBy { it.date ?: 0 }
+            SortOrder.MODIFIED_DESC -> searched.sortedByDescending { it.modified ?: 0 }
+            SortOrder.MODIFIED_ASC -> searched.sortedBy { it.modified ?: 0 }
         }
     }
 
