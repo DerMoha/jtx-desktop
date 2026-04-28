@@ -171,10 +171,12 @@ class ICalendarParser {
         return when {
             "VTODO" in componentNames -> parseVTodo(ics)
             "VNOTE" in componentNames -> parseVNote(ics)
-            "VJOURNAL" in componentNames -> parseVJournal(ics)
+            "VJOURNAL" in componentNames -> if (ics.hasProperty("DTSTART")) parseVJournal(ics) else parseVJournalNote(ics)
             else -> null
         }
     }
+
+    private fun String.hasProperty(name: String): Boolean = unfoldLines(lines()).any { it.isProperty(name) }
 
     private fun parseComponentNames(ics: String): Set<String> {
         return runCatching {
@@ -401,6 +403,56 @@ class ICalendarParser {
         } catch (e: Exception) { null }
     }
 
+    private fun parseVJournalNote(ics: String): NoteEntry? {
+        return try {
+            val lines = unfoldLines(ics.lines())
+            var uid = ""
+            var summary = ""
+            var description = ""
+            var categories = mutableListOf<String>()
+            var created: Long? = null
+            var dtstamp: Long? = null
+            var color: String? = null
+            var location: String? = null
+            var relatedEntries = emptyList<String>()
+            var attachments = emptyList<EntryAttachment>()
+            var comments = emptyList<EntryComment>()
+            var unknownProperties = emptyList<UnknownProperty>()
+            val knownProperties = commonKnownProperties + listOf("COMMENT")
+
+            for (line in lines) {
+                if (isUnknownContentLine(line, knownProperties)) unknownProperties = unknownProperties + UnknownProperty(line)
+                when {
+                    line.isProperty("UID") -> uid = line.propertyValue()
+                    line.isProperty("SUMMARY") -> summary = line.propertyTextValue()
+                    line.isProperty("DESCRIPTION") -> {
+                        val value = line.propertyTextValue()
+                        if (description.isEmpty()) description = value else description += value
+                    }
+                    line.isProperty("CATEGORIES") -> categories = parseIcsTextList(line.propertyValue()).toMutableList()
+                    line.isProperty("CREATED") -> created = parseIcsDate(line)
+                    line.isProperty("DTSTAMP") -> dtstamp = parseIcsDate(line)
+                    line.isProperty("COLOR") -> color = line.propertyValue()
+                    line.isProperty("X-APPLE-STRUCTURED-LOCATION") -> location = line.propertyValue()
+                    line.isProperty("RELATED-TO") -> relatedEntries = relatedEntries + line.propertyValue()
+                    line.isProperty("ATTACH") -> attachments = attachments + parseAttachment(line)
+                    line.isProperty("COMMENT") -> comments = comments + EntryComment(line.propertyTextValue())
+                }
+            }
+
+            if (uid.isEmpty()) return null
+
+            NoteEntry(
+                id = uid, uid = uid, title = summary, description = description,
+                categories = categories, created = created ?: System.currentTimeMillis(),
+                updated = dtstamp ?: System.currentTimeMillis(),
+                color = color, location = location, relatedEntries = relatedEntries,
+                attachments = attachments, comments = comments,
+                unknownProperties = unknownProperties
+            )
+        } catch (e: Exception) { null }
+    }
+
     fun entryToIcs(entry: Any): String = when (entry) {
         is JournalEntry -> journalToIcs(entry)
         is NoteEntry -> noteToIcs(entry)
@@ -476,7 +528,7 @@ class ICalendarParser {
             appendLine("VERSION:2.0")
             appendLine("CALSCALE:GREGORIAN")
             appendLine("PRODID:-//jtxBoard Desktop//EN")
-            appendLine("BEGIN:VNOTE")
+            appendLine("BEGIN:VJOURNAL")
             appendLine("UID:${entry.uid}")
             appendLine("DTSTAMP:${formatIcsDate(entry.updated)}")
             appendLine("SUMMARY:${entry.title.escapeIcsText()}")
@@ -490,7 +542,7 @@ class ICalendarParser {
             entry.unknownProperties.forEach { appendLine(it.line) }
             appendLine("CREATED:${formatIcsDate(entry.created)}")
             appendLine("LAST-MODIFIED:${formatIcsDate(entry.updated)}")
-            appendLine("END:VNOTE")
+            appendLine("END:VJOURNAL")
             appendLine("END:VCALENDAR")
         }.withIcsLineEndings()
     }
