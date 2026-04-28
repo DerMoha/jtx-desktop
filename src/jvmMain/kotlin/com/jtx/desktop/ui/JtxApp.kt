@@ -154,6 +154,8 @@ fun JtxApp(
     var showGlobalSearch by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var syncConflicts by remember { mutableStateOf<List<SyncRepository.SyncConflictInfo>>(emptyList()) }
+    var syncIssues by remember { mutableStateOf<List<ObjectSyncMetadata>>(emptyList()) }
+    var showSyncIssues by remember { mutableStateOf(false) }
     var allEntries by remember { mutableStateOf<List<CombinedEntry>>(emptyList()) }
     var collections by remember { mutableStateOf<List<CalDavCollection>>(emptyList()) }
     var entryToOpen by remember { mutableStateOf<CombinedEntry?>(null) }
@@ -184,6 +186,12 @@ fun JtxApp(
 
     LaunchedEffect(Unit) {
         syncRepository.localDataSource.getAllCollections().collect { collections = it }
+    }
+
+    LaunchedEffect(Unit) {
+        syncRepository.localDataSource.getAllObjectSyncMetadata().collect { metadata ->
+            syncIssues = metadata.filter { it.dirty || it.lastError != null }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -788,6 +796,11 @@ fun JtxApp(
                                 }
                             }
                         }
+                        if (syncIssues.isNotEmpty() || syncState == SyncState.ERROR || syncState == SyncState.CONFLICT) {
+                            IconButton(onClick = { showSyncIssues = true }) {
+                                Icon(Icons.Default.Warning, contentDescription = "Sync issues", tint = MaterialTheme.colorScheme.onPrimary)
+                            }
+                        }
                         IconButton(onClick = { showGlobalSearch = true }) {
                             Icon(Icons.Default.Search, contentDescription = "Global search", tint = MaterialTheme.colorScheme.onPrimary)
                         }
@@ -948,6 +961,19 @@ fun JtxApp(
             )
         }
 
+        if (showSyncIssues) {
+            SyncIssuesDialog(
+                issues = syncIssues,
+                conflictCount = syncConflicts.size,
+                syncState = syncState,
+                onDismiss = { showSyncIssues = false },
+                onRetrySync = {
+                    showSyncIssues = false
+                    syncNow()
+                }
+            )
+        }
+
         syncConflicts.firstOrNull()?.let { conflict ->
             AlertDialog(
                 onDismissRequest = {},
@@ -1024,6 +1050,62 @@ private fun Any.conflictTitle(): String = when (this) {
     is NoteEntry -> "note \"$title\""
     is TaskEntry -> "task \"$title\""
     else -> "entry"
+}
+
+@Composable
+private fun SyncIssuesDialog(
+    issues: List<ObjectSyncMetadata>,
+    conflictCount: Int,
+    syncState: SyncState,
+    onDismiss: () -> Unit,
+    onRetrySync: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Sync Issues") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("State: ${syncState.name.lowercase().replace('_', ' ')}")
+                if (conflictCount > 0) {
+                    Text("$conflictCount conflict${if (conflictCount == 1) "" else "s"} need resolution.")
+                }
+                if (issues.isEmpty()) {
+                    Text("No queued local changes or recorded sync errors.")
+                } else {
+                    Text("Queued changes and errors", style = MaterialTheme.typography.labelLarge)
+                    LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                        items(issues, key = { "${it.entryType}-${it.entryId}" }) { issue ->
+                            ListItem(
+                                headlineContent = { Text("${issue.entryType.name.lowercase()} ${issue.entryId}") },
+                                supportingContent = {
+                                    Text(
+                                        listOfNotNull(
+                                            if (issue.deleted) "delete queued" else if (issue.dirty) "upload queued" else null,
+                                            issue.lastError,
+                                            issue.collectionUrl
+                                        ).joinToString(" - ")
+                                    )
+                                }
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onRetrySync) {
+                Icon(Icons.Default.Refresh, contentDescription = null)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Retry Sync")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }
 
 @Composable
