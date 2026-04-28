@@ -38,6 +38,7 @@ import com.jtx.desktop.data.repository.JournalRepository
 import com.jtx.desktop.data.repository.NoteRepository
 import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.data.repository.TemplateRepository
+import com.jtx.desktop.data.repository.ConflictResolution
 import com.jtx.desktop.domain.model.*
 import java.awt.FileDialog
 import java.io.File
@@ -135,6 +136,7 @@ fun JtxApp(
     var searchFocused by remember { mutableStateOf(focusSearch) }
     var searchFocusRequest by remember { mutableStateOf(0) }
     var showAboutDialog by remember { mutableStateOf(false) }
+    var syncConflicts by remember { mutableStateOf<List<SyncRepository.SyncConflictInfo>>(emptyList()) }
     val rootFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
@@ -246,8 +248,35 @@ fun JtxApp(
             }
             syncState = SyncState.SYNCING
             val result = syncRepository.sync(credentials, collection)
-            syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
-            snackbarMessage = if (result.isSuccess) "Sync complete" else "Sync failed"
+            result.onSuccess { syncResult ->
+                syncConflicts = syncResult.conflicts
+                syncState = if (syncResult.conflicts.isEmpty()) SyncState.SUCCESS else SyncState.ERROR
+                snackbarMessage = if (syncResult.conflicts.isEmpty()) {
+                    "Sync complete"
+                } else {
+                    "${syncResult.conflicts.size} sync conflict${if (syncResult.conflicts.size == 1) "" else "s"} need resolution"
+                }
+            }.onFailure {
+                syncState = SyncState.ERROR
+                snackbarMessage = "Sync failed"
+            }
+        }
+    }
+
+    fun resolveCurrentConflict(resolution: ConflictResolution) {
+        val conflict = syncConflicts.firstOrNull() ?: return
+        val currentSettings = settings
+        val credentials = currentSettings?.credentials
+        val collection = currentSettings?.collection
+        if (credentials == null || collection == null) {
+            snackbarMessage = "Configure sync settings first"
+            return
+        }
+        scope.launch {
+            syncRepository.resolveConflict(credentials, collection, conflict, resolution)
+            syncConflicts = syncConflicts.drop(1)
+            snackbarMessage = if (syncConflicts.isEmpty()) "Conflict resolved" else "Conflict resolved"
+            refreshTrigger++
         }
     }
 
@@ -680,6 +709,35 @@ fun JtxApp(
             )
         }
 
+        syncConflicts.firstOrNull()?.let { conflict ->
+            AlertDialog(
+                onDismissRequest = {},
+                title = { Text("Sync Conflict") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Local and server versions both changed. Choose which version to keep.")
+                        Text("Local: ${conflict.localEntry.conflictTitle()}")
+                        Text("Server: ${conflict.serverEntry.conflictTitle()}")
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { resolveCurrentConflict(ConflictResolution.KEEP_LOCAL) }) {
+                        Text("Keep Local")
+                    }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = { resolveCurrentConflict(ConflictResolution.KEEP_SERVER) }) {
+                            Text("Keep Server")
+                        }
+                        TextButton(onClick = { resolveCurrentConflict(ConflictResolution.KEEP_BOTH) }) {
+                            Text("Keep Both")
+                        }
+                    }
+                }
+            )
+        }
+
         if (showAboutDialog) {
             AlertDialog(
                 onDismissRequest = { showAboutDialog = false },
@@ -694,6 +752,13 @@ fun JtxApp(
         }
         }
     }
+}
+
+private fun Any.conflictTitle(): String = when (this) {
+    is JournalEntry -> "journal \"$title\""
+    is NoteEntry -> "note \"$title\""
+    is TaskEntry -> "task \"$title\""
+    else -> "entry"
 }
 
 private suspend fun chooseFile(title: String, mode: Int, defaultFile: String): File? = withContext(Dispatchers.IO) {

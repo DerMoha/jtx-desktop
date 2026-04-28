@@ -8,6 +8,7 @@ import com.jtx.desktop.domain.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 
 class JournalRepository(private val local: LocalDataSource) {
     private var onDataChange: (() -> Unit)? = null
@@ -759,12 +760,76 @@ class SyncRepository(
     ) {
         when (resolution) {
             ConflictResolution.KEEP_LOCAL -> {
+                val result = calDavClient.putExistingEntry(
+                    credentials,
+                    conflict.serverHref,
+                    parser.entryToIcs(conflict.localEntry),
+                    null
+                )
+                val metadata = conflict.localEntry.toSyncMetadata(
+                    collection = collection,
+                    href = conflict.serverHref,
+                    etag = result.getOrNull(),
+                    dirty = result.isFailure,
+                    lastError = result.exceptionOrNull()?.message
+                )
+                local.upsertObjectSyncMetadata(metadata)
             }
             ConflictResolution.KEEP_SERVER -> {
+                insertServerConflictEntry(conflict.serverEntry)
+                local.upsertObjectSyncMetadata(
+                    conflict.serverEntry.toSyncMetadata(
+                        collection = collection,
+                        href = conflict.serverHref,
+                        dirty = false,
+                        lastError = null
+                    )
+                )
             }
             ConflictResolution.KEEP_BOTH -> {
-                conflict.localEntry
+                insertServerConflictEntry(conflict.serverEntry)
+                val localCopy = conflict.localEntry.copyForConflict()
+                insertServerConflictEntry(localCopy)
+                when (localCopy) {
+                    is JournalEntry -> local.markDirty(localCopy, EntryType.JOURNAL)
+                    is NoteEntry -> local.markDirty(localCopy, EntryType.NOTE)
+                    is TaskEntry -> local.markDirty(localCopy, EntryType.TASK)
+                }
             }
+        }
+    }
+
+    private suspend fun insertServerConflictEntry(entry: Any) {
+        when (entry) {
+            is JournalEntry -> local.insertJournal(entry)
+            is NoteEntry -> local.insertNote(entry)
+            is TaskEntry -> local.insertTask(entry)
+        }
+    }
+
+    private fun Any.copyForConflict(): Any {
+        val id = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        return when (this) {
+            is JournalEntry -> copy(id = id, uid = id, title = "$title (local copy)", created = now, updated = now)
+            is NoteEntry -> copy(id = id, uid = id, title = "$title (local copy)", created = now, updated = now)
+            is TaskEntry -> copy(id = id, uid = id, title = "$title (local copy)", created = now, updated = now)
+            else -> this
+        }
+    }
+
+    private fun Any.toSyncMetadata(
+        collection: String,
+        href: String,
+        etag: String? = null,
+        dirty: Boolean,
+        lastError: String?
+    ): ObjectSyncMetadata {
+        return when (this) {
+            is JournalEntry -> ObjectSyncMetadata(id, EntryType.JOURNAL, collection, href, href.substringAfterLast('/'), etag, dirty = dirty, deleted = false, uid = uid, sequence = sequence, lastModified = updated, lastError = lastError)
+            is NoteEntry -> ObjectSyncMetadata(id, EntryType.NOTE, collection, href, href.substringAfterLast('/'), etag, dirty = dirty, deleted = false, uid = uid, sequence = sequence, lastModified = updated, lastError = lastError)
+            is TaskEntry -> ObjectSyncMetadata(id, EntryType.TASK, collection, href, href.substringAfterLast('/'), etag, dirty = dirty, deleted = false, uid = uid, sequence = sequence, lastModified = updated, lastError = lastError)
+            else -> error("Unsupported conflict entry: ${this::class.simpleName}")
         }
     }
 }
