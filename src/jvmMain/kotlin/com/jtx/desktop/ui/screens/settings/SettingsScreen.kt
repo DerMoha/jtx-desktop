@@ -14,14 +14,19 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.jtx.desktop.data.local.exportJsonBackup
+import com.jtx.desktop.data.local.importJsonBackup
 import com.jtx.desktop.data.repository.SyncRepository
 import com.jtx.desktop.data.repository.TemplateRepository
-import com.jtx.desktop.data.local.SqliteLocalDataSource
 import com.jtx.desktop.domain.model.*
 import com.jtx.desktop.ui.SortOrder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.awt.FileDialog
 import java.io.File
+import java.io.FilenameFilter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -566,14 +571,10 @@ fun SettingsScreen(
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
-                        val dataSource = syncRepository.localDataSource
-                        if (dataSource is SqliteLocalDataSource) {
-                            val json = dataSource.exportAllData()
-                            File("jtx_board_export.json").writeText(json)
-                            syncMessage = "Data exported to jtx_board_export.json"
-                        } else {
-                            syncMessage = "Export not supported with current data source"
-                        }
+                        val file = chooseJsonBackupFile("Export Backup", FileDialog.SAVE) ?: return@launch
+                        val json = syncRepository.localDataSource.exportJsonBackup()
+                        withContext(Dispatchers.IO) { file.writeText(json) }
+                        syncMessage = "Backup exported to ${file.name}"
                         showExportDialog = false
                     }
                 }) {
@@ -602,21 +603,14 @@ fun SettingsScreen(
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
-                        val dataSource = syncRepository.localDataSource
-                        if (dataSource is SqliteLocalDataSource) {
-                            try {
-                                val file = File("jtx_board_export.json")
-                                if (file.exists()) {
-                                    dataSource.importData(file.readText())
-                                    syncMessage = "Data imported successfully"
-                                } else {
-                                    syncMessage = "File not found: jtx_board_export.json"
-                                }
-                            } catch (e: Exception) {
-                                syncMessage = "Import failed: ${e.message}"
-                            }
-                        } else {
-                            syncMessage = "Import not supported with current data source"
+                        val file = chooseJsonBackupFile("Import Backup", FileDialog.LOAD) ?: return@launch
+                        try {
+                            val json = withContext(Dispatchers.IO) { file.readText() }
+                            val result = syncRepository.localDataSource.importJsonBackup(json)
+                            settings = syncRepository.getSettings()
+                            syncMessage = "Restored ${result.totalEntries} entries from ${file.name}"
+                        } catch (e: Exception) {
+                            syncMessage = "Import failed: ${e.message}"
                         }
                         showImportDialog = false
                     }
@@ -703,4 +697,19 @@ private fun List<KanbanColumnConfig>.normalizedKanbanColumns(): List<KanbanColum
             )
         }
     }
+}
+
+private suspend fun chooseJsonBackupFile(title: String, mode: Int): File? = withContext(Dispatchers.IO) {
+    val dialog = FileDialog(null as java.awt.Frame?, title, mode).apply {
+        file = if (mode == FileDialog.SAVE) "jtxboard-backup.json" else "*.json"
+        filenameFilter = FilenameFilter { _, name -> name.endsWith(".json", ignoreCase = true) }
+        isVisible = true
+    }
+    val selectedFile = dialog.file ?: return@withContext null
+    File(dialog.directory, selectedFile).withJsonExtensionIfMissing(mode)
+}
+
+private fun File.withJsonExtensionIfMissing(mode: Int): File {
+    if (mode != FileDialog.SAVE || name.endsWith(".json", ignoreCase = true)) return this
+    return File(parentFile, "$name.json")
 }
