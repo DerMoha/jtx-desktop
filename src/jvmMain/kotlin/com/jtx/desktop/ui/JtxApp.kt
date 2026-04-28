@@ -13,7 +13,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.unit.dp
+import com.jtx.desktop.ui.desktop.ShortcutManager
+import com.jtx.desktop.ui.desktop.TrayManager
+import com.jtx.desktop.ui.desktop.TrayStatus
 import com.jtx.desktop.ui.theme.JtxBoardTheme
 import com.jtx.desktop.ui.screens.journals.JournalsScreen
 import com.jtx.desktop.ui.screens.notes.NotesScreen
@@ -26,8 +31,7 @@ import com.jtx.desktop.data.repository.NoteRepository
 import com.jtx.desktop.data.repository.TaskRepository
 import com.jtx.desktop.data.repository.TemplateRepository
 import com.jtx.desktop.domain.model.*
-import com.jtx.desktop.ui.desktop.TrayManager
-import com.jtx.desktop.ui.desktop.TrayStatus
+import java.awt.event.KeyEvent as AWTKeyEvent
 import kotlinx.coroutines.launch
 
 enum class Tab(val title: String, val icon: ImageVector) {
@@ -75,7 +79,8 @@ enum class UndoType {
 @Composable
 fun JtxApp(
     syncRepository: SyncRepository,
-    trayManager: TrayManager? = null
+    trayManager: TrayManager? = null,
+    focusSearch: Boolean = false
 ) {
     val journalRepository = remember { JournalRepository(syncRepository.localDataSource) }
     val noteRepository = remember { NoteRepository(syncRepository.localDataSource) }
@@ -91,11 +96,44 @@ fun JtxApp(
     var showArchived by remember { mutableStateOf(false) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     var isOffline by remember { mutableStateOf(false) }
+    var searchFocused by remember { mutableStateOf(focusSearch) }
 
     val undoManager = remember { UndoManager<UndoAction>() }
     val scope = rememberCoroutineScope()
 
     var settings by remember { mutableStateOf<AppSettings?>(null) }
+
+    fun handleKeyboardShortcut(event: KeyEvent): Boolean {
+        val awtEvent = event.nativeKeyEvent
+        if (awtEvent !is AWTKeyEvent) return false
+        val keyCode = awtEvent.keyCode
+        val modifiers = awtEvent.modifiers
+        val isCtrl = (modifiers and AWTKeyEvent.CTRL_MASK) != 0
+        val isShift = (modifiers and AWTKeyEvent.SHIFT_MASK) != 0
+        val isAlt = (modifiers and AWTKeyEvent.ALT_MASK) != 0
+        when {
+            isCtrl && keyCode == AWTKeyEvent.VK_N -> { showNewDialog = true; return true }
+            isCtrl && keyCode == AWTKeyEvent.VK_S -> {
+                scope.launch {
+                    syncState = SyncState.SYNCING
+                    val result = syncRepository.sync(
+                        settings?.credentials ?: return@launch,
+                        settings?.collection ?: return@launch
+                    )
+                    syncState = if (result.isSuccess) SyncState.SUCCESS else SyncState.ERROR
+                }
+                return true
+            }
+            isCtrl && keyCode == AWTKeyEvent.VK_F -> { searchFocused = true; return true }
+            isCtrl && keyCode == AWTKeyEvent.VK_COMMA -> { selectedTab = Tab.Settings; return true }
+            keyCode == AWTKeyEvent.VK_ESCAPE -> {
+                showNewDialog = false
+                searchFocused = false
+                return true
+            }
+        }
+        return false
+    }
 
     LaunchedEffect(Unit) {
         settings = syncRepository.getSettings()
