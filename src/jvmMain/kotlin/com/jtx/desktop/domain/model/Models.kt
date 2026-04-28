@@ -137,6 +137,22 @@ data class CalDavCollection(
 )
 
 @Serializable
+data class ObjectSyncMetadata(
+    val entryId: String,
+    val entryType: EntryType,
+    val collectionUrl: String? = null,
+    val href: String? = null,
+    val filename: String? = null,
+    val etag: String? = null,
+    val scheduleTag: String? = null,
+    val dirty: Boolean = false,
+    val deleted: Boolean = false,
+    val uid: String,
+    val sequence: Int = 0,
+    val lastModified: Long? = null
+)
+
+@Serializable
 data class AppSettings(
     val credentials: CalDavCredentials? = null,
     val collection: String? = null,

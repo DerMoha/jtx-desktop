@@ -34,6 +34,12 @@ interface LocalDataSource {
     suspend fun upsertCollection(collection: CalDavCollection)
     suspend fun deleteCollection(url: String)
 
+    fun getAllObjectSyncMetadata(): Flow<List<ObjectSyncMetadata>>
+    suspend fun getObjectSyncMetadata(entryType: EntryType, entryId: String): ObjectSyncMetadata?
+    suspend fun getDirtyObjectSyncMetadata(): List<ObjectSyncMetadata>
+    suspend fun upsertObjectSyncMetadata(metadata: ObjectSyncMetadata)
+    suspend fun deleteObjectSyncMetadata(entryType: EntryType, entryId: String)
+
     suspend fun getSettings(): AppSettings
     suspend fun saveSettings(settings: AppSettings)
 }

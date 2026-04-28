@@ -19,6 +19,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
     private var _notes = MutableStateFlow<List<NoteEntry>>(emptyList())
     private var _tasks = MutableStateFlow<List<TaskEntry>>(emptyList())
     private var _collections = MutableStateFlow<List<CalDavCollection>>(emptyList())
+    private var _objectSyncMetadata = MutableStateFlow<List<ObjectSyncMetadata>>(emptyList())
 
     private var settings = AppSettings()
     private var settingsChanged = true
@@ -106,6 +107,25 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 )
                 stmt.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS object_sync_metadata (
+                        entry_type TEXT NOT NULL,
+                        entry_id TEXT NOT NULL,
+                        collection_url TEXT,
+                        href TEXT,
+                        filename TEXT,
+                        etag TEXT,
+                        schedule_tag TEXT,
+                        dirty INTEGER NOT NULL DEFAULT 0,
+                        deleted INTEGER NOT NULL DEFAULT 0,
+                        uid TEXT NOT NULL,
+                        sequence INTEGER NOT NULL DEFAULT 0,
+                        last_modified INTEGER,
+                        PRIMARY KEY (entry_type, entry_id)
+                    )
+                    """
+                )
+                stmt.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS settings (
                         key TEXT PRIMARY KEY,
                         value TEXT NOT NULL
@@ -130,6 +150,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         _notes.value = loadNotes(includeArchived = true)
         _tasks.value = loadTasks(includeArchived = true)
         _collections.value = loadCollections()
+        _objectSyncMetadata.value = loadObjectSyncMetadata()
     }
 
     private fun loadJournals(includeArchived: Boolean = false): List<JournalEntry> = useConnection { conn ->
@@ -251,6 +272,35 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
         )
     }
 
+    private fun loadObjectSyncMetadata(): List<ObjectSyncMetadata> = useConnection { conn ->
+        conn.createStatement().use { stmt ->
+            stmt.executeQuery("SELECT * FROM object_sync_metadata").use { rs ->
+                val list = mutableListOf<ObjectSyncMetadata>()
+                while (rs.next()) {
+                    list.add(objectSyncMetadataFromResultSet(rs))
+                }
+                list
+            }
+        }
+    }
+
+    private fun objectSyncMetadataFromResultSet(rs: ResultSet): ObjectSyncMetadata {
+        return ObjectSyncMetadata(
+            entryType = EntryType.valueOf(rs.getString("entry_type")),
+            entryId = rs.getString("entry_id"),
+            collectionUrl = rs.getString("collection_url"),
+            href = rs.getString("href"),
+            filename = rs.getString("filename"),
+            etag = rs.getString("etag"),
+            scheduleTag = rs.getString("schedule_tag"),
+            dirty = rs.getInt("dirty") == 1,
+            deleted = rs.getInt("deleted") == 1,
+            uid = rs.getString("uid"),
+            sequence = rs.getInt("sequence"),
+            lastModified = rs.getObject("last_modified") as? Long
+        )
+    }
+
     override fun getAllJournals(includeArchived: Boolean): Flow<List<JournalEntry>> =
         _journals.map { journals -> if (includeArchived) journals else journals.filter { !it.archived } }
     override fun getAllNotes(includeArchived: Boolean): Flow<List<NoteEntry>> =
@@ -258,6 +308,7 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
     override fun getAllTasks(includeArchived: Boolean): Flow<List<TaskEntry>> =
         _tasks.map { tasks -> if (includeArchived) tasks else tasks.filter { !it.archived } }
     override fun getAllCollections(): Flow<List<CalDavCollection>> = _collections
+    override fun getAllObjectSyncMetadata(): Flow<List<ObjectSyncMetadata>> = _objectSyncMetadata
 
     override suspend fun getJournalById(id: String): JournalEntry? = withContext(Dispatchers.IO) {
         useConnection { conn ->
@@ -298,6 +349,33 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
                 ps.setString(1, url)
                 ps.executeQuery().use { rs ->
                     if (rs.next()) collectionFromResultSet(rs) else null
+                }
+            }
+        }
+    }
+
+    override suspend fun getObjectSyncMetadata(entryType: EntryType, entryId: String): ObjectSyncMetadata? =
+        withContext(Dispatchers.IO) {
+            useConnection { conn ->
+                conn.prepareStatement("SELECT * FROM object_sync_metadata WHERE entry_type = ? AND entry_id = ?").use { ps ->
+                    ps.setString(1, entryType.name)
+                    ps.setString(2, entryId)
+                    ps.executeQuery().use { rs ->
+                        if (rs.next()) objectSyncMetadataFromResultSet(rs) else null
+                    }
+                }
+            }
+        }
+
+    override suspend fun getDirtyObjectSyncMetadata(): List<ObjectSyncMetadata> = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT * FROM object_sync_metadata WHERE dirty = 1 OR deleted = 1").use { rs ->
+                    val list = mutableListOf<ObjectSyncMetadata>()
+                    while (rs.next()) {
+                        list.add(objectSyncMetadataFromResultSet(rs))
+                    }
+                    list
                 }
             }
         }
@@ -423,6 +501,42 @@ class SqliteLocalDataSource(private val dbPath: String) : LocalDataSource {
             }
         }
         _collections.value = loadCollections()
+    }
+
+    override suspend fun upsertObjectSyncMetadata(metadata: ObjectSyncMetadata) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement(
+                """INSERT OR REPLACE INTO object_sync_metadata
+                   (entry_type, entry_id, collection_url, href, filename, etag, schedule_tag, dirty, deleted, uid, sequence, last_modified)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            ).use { ps ->
+                ps.setString(1, metadata.entryType.name)
+                ps.setString(2, metadata.entryId)
+                ps.setString(3, metadata.collectionUrl)
+                ps.setString(4, metadata.href)
+                ps.setString(5, metadata.filename)
+                ps.setString(6, metadata.etag)
+                ps.setString(7, metadata.scheduleTag)
+                ps.setInt(8, if (metadata.dirty) 1 else 0)
+                ps.setInt(9, if (metadata.deleted) 1 else 0)
+                ps.setString(10, metadata.uid)
+                ps.setInt(11, metadata.sequence)
+                ps.setObject(12, metadata.lastModified)
+                ps.executeUpdate()
+            }
+        }
+        _objectSyncMetadata.value = loadObjectSyncMetadata()
+    }
+
+    override suspend fun deleteObjectSyncMetadata(entryType: EntryType, entryId: String) = withContext(Dispatchers.IO) {
+        useConnection { conn ->
+            conn.prepareStatement("DELETE FROM object_sync_metadata WHERE entry_type = ? AND entry_id = ?").use { ps ->
+                ps.setString(1, entryType.name)
+                ps.setString(2, entryId)
+                ps.executeUpdate()
+            }
+        }
+        _objectSyncMetadata.value = loadObjectSyncMetadata()
     }
 
     override suspend fun deleteJournal(id: String) = withContext(Dispatchers.IO) {
