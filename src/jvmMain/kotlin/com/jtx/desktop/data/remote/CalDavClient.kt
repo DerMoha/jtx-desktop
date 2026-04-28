@@ -3,11 +3,13 @@ package com.jtx.desktop.data.remote
 import com.jtx.desktop.domain.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
 import java.util.Base64
-import javax.net.ssl.HttpsURLConnection
 
 class CalDavHttpException(
     val statusCode: Int,
@@ -19,6 +21,9 @@ class CalDavClient {
     private val readTimeout = 60000
     private val maxRetries = 3
     private val baseDelayMs = 1000L
+    private val httpClient = HttpClient.newBuilder()
+        .connectTimeout(Duration.ofMillis(connectTimeout.toLong()))
+        .build()
 
     data class RemoteCalendarObject(
         val href: String,
@@ -28,15 +33,6 @@ class CalDavClient {
 
     suspend fun fetchEntries(credentials: CalDavCredentials, collection: String): Result<List<String>> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
-            val url = resolveUrl(credentials, collection)
-            val conn = url.openConnection() as HttpsURLConnection
-            conn.connectTimeout = connectTimeout
-            conn.readTimeout = readTimeout
-            conn.requestMethod = "REPORT"
-            conn.setRequestProperty("Content-Type", "application/xml; charset=utf-8")
-            conn.setRequestProperty("Depth", "1")
-            setAuth(conn, credentials)
-
             val body = """<?xml version="1.0" encoding="utf-8"?>
                 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
                     <d:prop>
@@ -48,17 +44,18 @@ class CalDavClient {
                     </c:filter>
                 </c:calendar-query>"""
 
-            conn.doOutput = true
-            conn.outputStream.write(body.toByteArray())
-
-            val responseCode = conn.responseCode
-            val response = if (responseCode == 207) {
-                conn.inputStream.bufferedReader().readText()
+            val response = sendRequest(
+                credentials = credentials,
+                href = collection,
+                method = "REPORT",
+                body = body,
+                headers = mapOf("Content-Type" to "application/xml; charset=utf-8", "Depth" to "1")
+            )
+            if (response.statusCode() == 207) {
+                Result.success(parseHrefs(response.body()))
             } else {
-                throw Exception("HTTP $responseCode: ${conn.responseMessage}")
+                Result.failure(Exception("HTTP ${response.statusCode()}"))
             }
-
-            Result.success(parseHrefs(response))
         }
     }
 
@@ -107,19 +104,11 @@ class CalDavClient {
 
     suspend fun fetchCalendarData(credentials: CalDavCredentials, href: String): Result<String> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
-            val url = resolveUrl(credentials, href)
-            val conn = url.openConnection() as HttpsURLConnection
-            conn.connectTimeout = connectTimeout
-            conn.readTimeout = readTimeout
-            conn.requestMethod = "GET"
-            setAuth(conn, credentials)
-
-            val responseCode = conn.responseCode
-            if (responseCode == 200) {
-                val data = conn.inputStream.bufferedReader().readText()
-                Result.success(data)
+            val response = sendRequest(credentials, href, "GET")
+            if (response.statusCode() == 200) {
+                Result.success(response.body())
             } else {
-                Result.failure(Exception("HTTP $responseCode"))
+                Result.failure(Exception("HTTP ${response.statusCode()}"))
             }
         }
     }
@@ -131,15 +120,6 @@ class CalDavClient {
     ): Result<List<RemoteCalendarObject>> = withContext(Dispatchers.IO) {
         if (hrefs.isEmpty()) return@withContext Result.success(emptyList())
         retryWithBackoff(maxRetries) {
-            val url = resolveUrl(credentials, collection)
-            val conn = url.openConnection() as HttpsURLConnection
-            conn.connectTimeout = connectTimeout
-            conn.readTimeout = readTimeout
-            conn.requestMethod = "REPORT"
-            conn.setRequestProperty("Content-Type", "application/xml; charset=utf-8")
-            conn.setRequestProperty("Depth", "0")
-            setAuth(conn, credentials)
-
             val hrefXml = hrefs.joinToString("\n") { href ->
                 "<d:href>${href.escapeXml()}</d:href>"
             }
@@ -152,58 +132,51 @@ class CalDavClient {
                     $hrefXml
                 </c:calendar-multiget>"""
 
-            conn.doOutput = true
-            conn.outputStream.write(body.toByteArray())
-
-            val responseCode = conn.responseCode
-            if (responseCode == 207) {
-                Result.success(parseCalendarObjects(conn.inputStream.bufferedReader().readText()))
+            val response = sendRequest(
+                credentials = credentials,
+                href = collection,
+                method = "REPORT",
+                body = body,
+                headers = mapOf("Content-Type" to "application/xml; charset=utf-8", "Depth" to "0")
+            )
+            if (response.statusCode() == 207) {
+                Result.success(parseCalendarObjects(response.body()))
             } else {
-                Result.failure(Exception("HTTP $responseCode: ${conn.responseMessage}"))
+                Result.failure(Exception("HTTP ${response.statusCode()}"))
             }
         }
     }
 
     suspend fun putEntry(credentials: CalDavCredentials, href: String, icsContent: String): Result<String> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
-            val url = resolveUrl(credentials, href)
-            val conn = url.openConnection() as HttpsURLConnection
-            conn.connectTimeout = connectTimeout
-            conn.readTimeout = readTimeout
-            conn.requestMethod = "PUT"
-            conn.setRequestProperty("Content-Type", "text/calendar; charset=utf-8")
-            conn.setRequestProperty("If-Match", "*")
-            setAuth(conn, credentials)
-            conn.doOutput = true
-            conn.outputStream.write(icsContent.toByteArray())
-
-            val responseCode = conn.responseCode
-            if (responseCode in 200..299) {
-                Result.success(conn.responseMessage ?: "OK")
+            val response = sendRequest(
+                credentials = credentials,
+                href = href,
+                method = "PUT",
+                body = icsContent,
+                headers = mapOf("Content-Type" to "text/calendar; charset=utf-8", "If-Match" to "*")
+            )
+            if (response.statusCode() in 200..299) {
+                Result.success("OK")
             } else {
-                Result.failure(Exception("HTTP $responseCode: ${conn.responseMessage}"))
+                Result.failure(Exception("HTTP ${response.statusCode()}"))
             }
         }
     }
 
     suspend fun putNewEntry(credentials: CalDavCredentials, href: String, icsContent: String): Result<String?> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
-            val url = resolveUrl(credentials, href)
-            val conn = url.openConnection() as HttpsURLConnection
-            conn.connectTimeout = connectTimeout
-            conn.readTimeout = readTimeout
-            conn.requestMethod = "PUT"
-            conn.setRequestProperty("Content-Type", "text/calendar; charset=utf-8")
-            conn.setRequestProperty("If-None-Match", "*")
-            setAuth(conn, credentials)
-            conn.doOutput = true
-            conn.outputStream.write(icsContent.toByteArray())
-
-            val responseCode = conn.responseCode
-            if (responseCode in 200..299) {
-                Result.success(conn.getHeaderField("ETag"))
+            val response = sendRequest(
+                credentials = credentials,
+                href = href,
+                method = "PUT",
+                body = icsContent,
+                headers = mapOf("Content-Type" to "text/calendar; charset=utf-8", "If-None-Match" to "*")
+            )
+            if (response.statusCode() in 200..299) {
+                Result.success(response.headers().firstValue("ETag").orElse(null))
             } else {
-                Result.failure(CalDavHttpException(responseCode, "HTTP $responseCode: ${conn.responseMessage}"))
+                Result.failure(CalDavHttpException(response.statusCode(), "HTTP ${response.statusCode()}"))
             }
         }
     }
@@ -215,40 +188,28 @@ class CalDavClient {
         etag: String?
     ): Result<String?> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
-            val url = resolveUrl(credentials, href)
-            val conn = url.openConnection() as HttpsURLConnection
-            conn.connectTimeout = connectTimeout
-            conn.readTimeout = readTimeout
-            conn.requestMethod = "PUT"
-            conn.setRequestProperty("Content-Type", "text/calendar; charset=utf-8")
-            conn.setRequestProperty("If-Match", etag ?: "*")
-            setAuth(conn, credentials)
-            conn.doOutput = true
-            conn.outputStream.write(icsContent.toByteArray())
-
-            val responseCode = conn.responseCode
-            if (responseCode in 200..299) {
-                Result.success(conn.getHeaderField("ETag"))
+            val response = sendRequest(
+                credentials = credentials,
+                href = href,
+                method = "PUT",
+                body = icsContent,
+                headers = mapOf("Content-Type" to "text/calendar; charset=utf-8", "If-Match" to (etag ?: "*"))
+            )
+            if (response.statusCode() in 200..299) {
+                Result.success(response.headers().firstValue("ETag").orElse(null))
             } else {
-                Result.failure(CalDavHttpException(responseCode, "HTTP $responseCode: ${conn.responseMessage}"))
+                Result.failure(CalDavHttpException(response.statusCode(), "HTTP ${response.statusCode()}"))
             }
         }
     }
 
     suspend fun deleteEntry(credentials: CalDavCredentials, href: String): Result<Unit> = withContext(Dispatchers.IO) {
         retryWithBackoff(maxRetries) {
-            val url = resolveUrl(credentials, href)
-            val conn = url.openConnection() as HttpsURLConnection
-            conn.connectTimeout = connectTimeout
-            conn.readTimeout = readTimeout
-            conn.requestMethod = "DELETE"
-            setAuth(conn, credentials)
-
-            val responseCode = conn.responseCode
-            if (responseCode in 200..299 || responseCode == 404 || responseCode == 410) {
+            val response = sendRequest(credentials, href, "DELETE")
+            if (response.statusCode() in 200..299 || response.statusCode() == 404 || response.statusCode() == 410) {
                 Result.success(Unit)
             } else {
-                Result.failure(Exception("HTTP $responseCode"))
+                Result.failure(Exception("HTTP ${response.statusCode()}"))
             }
         }
     }
@@ -271,29 +232,39 @@ class CalDavClient {
         return Result.failure(lastException ?: Exception("All retries failed"))
     }
 
-    private fun setAuth(conn: HttpsURLConnection, credentials: CalDavCredentials) {
+    private fun authHeader(credentials: CalDavCredentials): String {
         val auth = "${credentials.username}:${credentials.password}"
         val encoded = Base64.getEncoder().encodeToString(auth.toByteArray())
-        conn.setRequestProperty("Authorization", "Basic $encoded")
+        return "Basic $encoded"
     }
 
     private fun propfind(credentials: CalDavCredentials, href: String, depth: String, body: String): String {
-        val url = resolveUrl(credentials, href)
-        val conn = url.openConnection() as HttpsURLConnection
-        conn.connectTimeout = connectTimeout
-        conn.readTimeout = readTimeout
-        conn.requestMethod = "PROPFIND"
-        conn.setRequestProperty("Content-Type", "application/xml; charset=utf-8")
-        conn.setRequestProperty("Depth", depth)
-        setAuth(conn, credentials)
-        conn.doOutput = true
-        conn.outputStream.write(body.toByteArray())
-
-        val responseCode = conn.responseCode
-        if (responseCode != 207) {
-            throw Exception("HTTP $responseCode: ${conn.responseMessage}")
+        val response = sendRequest(
+            credentials = credentials,
+            href = href,
+            method = "PROPFIND",
+            body = body,
+            headers = mapOf("Content-Type" to "application/xml; charset=utf-8", "Depth" to depth)
+        )
+        if (response.statusCode() != 207) {
+            throw Exception("HTTP ${response.statusCode()}")
         }
-        return conn.inputStream.bufferedReader().readText()
+        return response.body()
+    }
+
+    private fun sendRequest(
+        credentials: CalDavCredentials,
+        href: String,
+        method: String,
+        body: String? = null,
+        headers: Map<String, String> = emptyMap()
+    ): HttpResponse<String> {
+        val builder = HttpRequest.newBuilder(resolveUrl(credentials, href).toURI())
+            .timeout(Duration.ofMillis(readTimeout.toLong()))
+            .header("Authorization", authHeader(credentials))
+        headers.forEach { (name, value) -> builder.header(name, value) }
+        val publisher = body?.let { HttpRequest.BodyPublishers.ofString(it) } ?: HttpRequest.BodyPublishers.noBody()
+        return httpClient.send(builder.method(method, publisher).build(), HttpResponse.BodyHandlers.ofString())
     }
 
     private fun resolveUrl(credentials: CalDavCredentials, href: String): URL {
